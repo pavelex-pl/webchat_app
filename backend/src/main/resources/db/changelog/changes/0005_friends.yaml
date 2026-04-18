@@ -1,0 +1,43 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0005-friendships
+      author: webchat
+      changes:
+        - createTable:
+            tableName: friendships
+            columns:
+              - column: { name: user_a_id,    type: BIGINT,      constraints: { nullable: false, foreignKeyName: fk_fr_a, references: "users(id)", deleteCascade: true } }
+              - column: { name: user_b_id,    type: BIGINT,      constraints: { nullable: false, foreignKeyName: fk_fr_b, references: "users(id)", deleteCascade: true } }
+              - column: { name: status,       type: VARCHAR(10), constraints: { nullable: false } }
+              - column: { name: initiated_by, type: BIGINT,      constraints: { nullable: false, foreignKeyName: fk_fr_init, references: "users(id)", deleteCascade: true } }
+              - column: { name: request_text, type: TEXT }
+              - column: { name: created_at,   type: TIMESTAMPTZ, defaultValueComputed: "now()", constraints: { nullable: false } }
+              - column: { name: accepted_at,  type: TIMESTAMPTZ }
+        - addPrimaryKey:
+            tableName: friendships
+            columnNames: user_a_id, user_b_id
+            constraintName: pk_friendships
+        - sql:
+            sql: "ALTER TABLE friendships ADD CONSTRAINT chk_friendships_order CHECK (user_a_id < user_b_id)"
+        - sql:
+            sql: "ALTER TABLE friendships ADD CONSTRAINT chk_friendships_status CHECK (status IN ('PENDING','ACCEPTED'))"
+
+  - changeSet:
+      id: 0005-user-blocks
+      author: webchat
+      changes:
+        - createTable:
+            tableName: user_blocks
+            columns:
+              - column: { name: blocker_id, type: BIGINT,      constraints: { nullable: false, foreignKeyName: fk_ub_blocker, references: "users(id)", deleteCascade: true } }
+              - column: { name: blocked_id, type: BIGINT,      constraints: { nullable: false, foreignKeyName: fk_ub_blocked, references: "users(id)", deleteCascade: true } }
+              - column: { name: created_at, type: TIMESTAMPTZ, defaultValueComputed: "now()", constraints: { nullable: false } }
+        - addPrimaryKey:
+            tableName: user_blocks
+            columnNames: blocker_id, blocked_id
+            constraintName: pk_user_blocks
+        - createIndex:
+            tableName: user_blocks
+            indexName: idx_user_blocks_blocked
+            columns:
+              - column: { name: blocked_id }

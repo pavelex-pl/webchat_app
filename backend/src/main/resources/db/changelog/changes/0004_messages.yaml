@@ -1,0 +1,42 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0004-messages
+      author: webchat
+      changes:
+        - createTable:
+            tableName: messages
+            columns:
+              - column: { name: id,          type: BIGSERIAL,   constraints: { primaryKey: true, nullable: false } }
+              - column: { name: chat_id,     type: BIGINT,      constraints: { nullable: false, foreignKeyName: fk_messages_chat, references: "chats(id)", deleteCascade: true } }
+              - column: { name: author_id,   type: BIGINT }
+              - column: { name: reply_to_id, type: BIGINT }
+              - column: { name: body,        type: TEXT }
+              - column: { name: created_at,  type: TIMESTAMPTZ, defaultValueComputed: "now()", constraints: { nullable: false } }
+              - column: { name: edited_at,   type: TIMESTAMPTZ }
+              - column: { name: deleted_at,  type: TIMESTAMPTZ }
+        - sql:
+            sql: "ALTER TABLE messages ADD CONSTRAINT fk_messages_author FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE SET NULL"
+        - sql:
+            sql: "ALTER TABLE messages ADD CONSTRAINT fk_messages_reply_to FOREIGN KEY (reply_to_id) REFERENCES messages(id) ON DELETE SET NULL"
+        - createIndex:
+            tableName: messages
+            indexName: idx_messages_chat_id_desc
+            columns:
+              - column: { name: chat_id }
+              - column: { name: id, descending: true }
+
+  - changeSet:
+      id: 0004-read-markers
+      author: webchat
+      changes:
+        - createTable:
+            tableName: read_markers
+            columns:
+              - column: { name: chat_id,              type: BIGINT,      constraints: { nullable: false, foreignKeyName: fk_rm_chat, references: "chats(id)", deleteCascade: true } }
+              - column: { name: user_id,              type: BIGINT,      constraints: { nullable: false, foreignKeyName: fk_rm_user, references: "users(id)", deleteCascade: true } }
+              - column: { name: last_read_message_id, type: BIGINT }
+              - column: { name: updated_at,           type: TIMESTAMPTZ, defaultValueComputed: "now()", constraints: { nullable: false } }
+        - addPrimaryKey:
+            tableName: read_markers
+            columnNames: chat_id, user_id
+            constraintName: pk_read_markers

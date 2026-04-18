@@ -1,0 +1,56 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0002-citext-extension
+      author: webchat
+      changes:
+        - sql:
+            sql: "CREATE EXTENSION IF NOT EXISTS citext"
+
+  - changeSet:
+      id: 0002-users
+      author: webchat
+      changes:
+        - createTable:
+            tableName: users
+            columns:
+              - column: { name: id,            type: BIGSERIAL,  constraints: { primaryKey: true, nullable: false } }
+              - column: { name: email,         type: CITEXT,     constraints: { nullable: false, unique: true } }
+              - column: { name: username,      type: CITEXT,     constraints: { nullable: false, unique: true } }
+              - column: { name: password_hash, type: TEXT,       constraints: { nullable: false } }
+              - column: { name: created_at,    type: TIMESTAMPTZ, defaultValueComputed: "now()", constraints: { nullable: false } }
+              - column: { name: deleted_at,    type: TIMESTAMPTZ }
+
+  - changeSet:
+      id: 0002-sessions
+      author: webchat
+      changes:
+        - createTable:
+            tableName: sessions
+            columns:
+              - column: { name: id,            type: UUID,       constraints: { primaryKey: true, nullable: false } }
+              - column: { name: user_id,       type: BIGINT,     constraints: { nullable: false, foreignKeyName: fk_sessions_user, references: "users(id)", deleteCascade: true } }
+              - column: { name: refresh_hash,  type: TEXT,       constraints: { nullable: false } }
+              - column: { name: user_agent,    type: TEXT }
+              - column: { name: ip,            type: TEXT }
+              - column: { name: created_at,    type: TIMESTAMPTZ, defaultValueComputed: "now()", constraints: { nullable: false } }
+              - column: { name: last_seen_at,  type: TIMESTAMPTZ, defaultValueComputed: "now()", constraints: { nullable: false } }
+              - column: { name: expires_at,    type: TIMESTAMPTZ, constraints: { nullable: false } }
+              - column: { name: revoked_at,    type: TIMESTAMPTZ }
+        - createIndex:
+            tableName: sessions
+            indexName: idx_sessions_user_active
+            columns:
+              - column: { name: user_id }
+              - column: { name: revoked_at }
+
+  - changeSet:
+      id: 0002-password-reset-tokens
+      author: webchat
+      changes:
+        - createTable:
+            tableName: password_reset_tokens
+            columns:
+              - column: { name: token_hash, type: TEXT,        constraints: { primaryKey: true, nullable: false } }
+              - column: { name: user_id,    type: BIGINT,      constraints: { nullable: false, foreignKeyName: fk_prt_user, references: "users(id)", deleteCascade: true } }
+              - column: { name: expires_at, type: TIMESTAMPTZ, constraints: { nullable: false } }
+              - column: { name: used_at,    type: TIMESTAMPTZ }

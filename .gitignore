@@ -1,0 +1,17 @@
+.env
+.DS_Store
+.idea/
+*.iml
+
+# Backend (Gradle)
+backend/.gradle/
+backend/build/
+backend/out/
+
+# Frontend (Node)
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Logs
+*.log

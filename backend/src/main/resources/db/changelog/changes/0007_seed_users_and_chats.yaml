@@ -1,0 +1,76 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0007-pgcrypto
+      author: webchat
+      changes:
+        - sql:
+            sql: "CREATE EXTENSION IF NOT EXISTS pgcrypto"
+
+  - changeSet:
+      id: 0007-seed-users
+      author: webchat
+      comment: "Seed user pavlo + test1..test100 with password user123QWERTY!"
+      changes:
+        - sql:
+            splitStatements: false
+            sql: |
+              INSERT INTO users (email, username, password_hash)
+              VALUES ('pavlo@webchat.local', 'pavlo',
+                      crypt('user123QWERTY!', gen_salt('bf', 12)));
+
+              INSERT INTO users (email, username, password_hash)
+              SELECT 'test' || i || '@webchat.local',
+                     'test' || i,
+                     crypt('user123QWERTY!', gen_salt('bf', 12))
+              FROM generate_series(1, 100) AS i;
+
+  - changeSet:
+      id: 0007-seed-chats
+      author: webchat
+      comment: "Seed 5 public + 5 private rooms; pavlo is owner, 14 random test users as members"
+      changes:
+        - sql:
+            splitStatements: false
+            sql: |
+              DO $do$
+              DECLARE
+                pavlo_id     BIGINT;
+                new_chat_id  BIGINT;
+                room_name    TEXT;
+                public_names TEXT[] := ARRAY['general','random','engineering','gaming','memes'];
+                private_names TEXT[] := ARRAY['ops','core-team','design','leadership','sre'];
+              BEGIN
+                SELECT id INTO pavlo_id FROM users WHERE username = 'pavlo';
+
+                FOREACH room_name IN ARRAY public_names LOOP
+                  INSERT INTO chats (type, name, description, owner_id)
+                       VALUES ('PUBLIC_ROOM', room_name,
+                               'Seed room: ' || room_name, pavlo_id)
+                    RETURNING id INTO new_chat_id;
+
+                  INSERT INTO chat_members (chat_id, user_id, role)
+                       VALUES (new_chat_id, pavlo_id, 'OWNER');
+
+                  INSERT INTO chat_members (chat_id, user_id, role)
+                  SELECT new_chat_id, u.id, 'MEMBER'
+                    FROM (SELECT id FROM users
+                           WHERE username LIKE 'test%'
+                        ORDER BY random() LIMIT 14) u;
+                END LOOP;
+
+                FOREACH room_name IN ARRAY private_names LOOP
+                  INSERT INTO chats (type, name, description, owner_id)
+                       VALUES ('PRIVATE_ROOM', room_name,
+                               'Seed room: ' || room_name, pavlo_id)
+                    RETURNING id INTO new_chat_id;
+
+                  INSERT INTO chat_members (chat_id, user_id, role)
+                       VALUES (new_chat_id, pavlo_id, 'OWNER');
+
+                  INSERT INTO chat_members (chat_id, user_id, role)
+                  SELECT new_chat_id, u.id, 'MEMBER'
+                    FROM (SELECT id FROM users
+                           WHERE username LIKE 'test%'
+                        ORDER BY random() LIMIT 14) u;
+                END LOOP;
+              END $do$;

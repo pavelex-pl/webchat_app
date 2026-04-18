@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gradle --version)",
+      "Bash(docker --version)",
+      "Bash(npm --version)",
+      "Bash(docker run *)",
+      "Bash(python3 *)",
+      "Bash(docker version *)",
+      "Bash(docker info *)",
+      "Bash(echo \"Docker up: $\\(docker version --format '{{.Server.Version}}'\\)\")",
+      "Bash(cp -n .env.example .env)",
+      "Bash(docker compose *)",
+      "Bash(curl -s -o /tmp/h.json -w 'HTTP %{http_code}\\\\n' http://localhost/api/health)",
+      "Read(//tmp/**)",
+      "Bash(curl -s -o /tmp/login.json -w 'HTTP %{http_code}\\\\n' -X POST http://localhost/api/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"pavlo@webchat.local\",\"password\":\"user123QWERTY!\"}')",
+      "Bash(curl -s -I http://localhost/)",
+      "Bash(curl -s -b /tmp/cookies.txt -c /tmp/cookies.txt -X POST http://localhost/api/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"pavlo@webchat.local\",\"password\":\"user123QWERTY!\"}' echo \"== chat detail ==\")",
+      "Bash(curl -s -b /tmp/cookies.txt http://localhost/api/chats/3)",
+      "Bash(curl -s -b /tmp/cookies.txt http://localhost/api/rooms/3/members)"
+    ]
+  }
+}

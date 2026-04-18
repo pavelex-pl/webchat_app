@@ -1,0 +1,85 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0003-chats
+      author: webchat
+      changes:
+        - createTable:
+            tableName: chats
+            columns:
+              - column: { name: id,          type: BIGSERIAL,   constraints: { primaryKey: true, nullable: false } }
+              - column: { name: type,        type: VARCHAR(20), constraints: { nullable: false } }
+              - column: { name: name,        type: CITEXT,      constraints: { unique: true } }
+              - column: { name: description, type: TEXT }
+              - column: { name: owner_id,    type: BIGINT,      constraints: { foreignKeyName: fk_chats_owner, references: "users(id)", deleteCascade: true } }
+              - column: { name: created_at,  type: TIMESTAMPTZ, defaultValueComputed: "now()", constraints: { nullable: false } }
+        - sql:
+            sql: "ALTER TABLE chats ADD CONSTRAINT chk_chats_type CHECK (type IN ('PUBLIC_ROOM','PRIVATE_ROOM','DIRECT'))"
+        - sql:
+            sql: |
+              ALTER TABLE chats ADD CONSTRAINT chk_chats_shape CHECK (
+                (type = 'DIRECT' AND name IS NULL AND owner_id IS NULL)
+                OR (type IN ('PUBLIC_ROOM','PRIVATE_ROOM') AND name IS NOT NULL AND owner_id IS NOT NULL)
+              )
+
+  - changeSet:
+      id: 0003-chat-members
+      author: webchat
+      changes:
+        - createTable:
+            tableName: chat_members
+            columns:
+              - column: { name: chat_id,   type: BIGINT,      constraints: { nullable: false, foreignKeyName: fk_cm_chat, references: "chats(id)", deleteCascade: true } }
+              - column: { name: user_id,   type: BIGINT,      constraints: { nullable: false, foreignKeyName: fk_cm_user, references: "users(id)", deleteCascade: true } }
+              - column: { name: role,      type: VARCHAR(10), constraints: { nullable: false } }
+              - column: { name: joined_at, type: TIMESTAMPTZ, defaultValueComputed: "now()", constraints: { nullable: false } }
+        - addPrimaryKey:
+            tableName: chat_members
+            columnNames: chat_id, user_id
+            constraintName: pk_chat_members
+        - sql:
+            sql: "ALTER TABLE chat_members ADD CONSTRAINT chk_chat_members_role CHECK (role IN ('OWNER','ADMIN','MEMBER'))"
+        - createIndex:
+            tableName: chat_members
+            indexName: idx_chat_members_user
+            columns:
+              - column: { name: user_id }
+
+  - changeSet:
+      id: 0003-chat-bans
+      author: webchat
+      changes:
+        - createTable:
+            tableName: chat_bans
+            columns:
+              - column: { name: chat_id,   type: BIGINT,      constraints: { nullable: false, foreignKeyName: fk_cb_chat, references: "chats(id)", deleteCascade: true } }
+              - column: { name: user_id,   type: BIGINT,      constraints: { nullable: false, foreignKeyName: fk_cb_user, references: "users(id)", deleteCascade: true } }
+              - column: { name: banned_by, type: BIGINT,      constraints: { foreignKeyName: fk_cb_banned_by, references: "users(id)" } }
+              - column: { name: banned_at, type: TIMESTAMPTZ, defaultValueComputed: "now()", constraints: { nullable: false } }
+        - addPrimaryKey:
+            tableName: chat_bans
+            columnNames: chat_id, user_id
+            constraintName: pk_chat_bans
+        - sql:
+            sql: "ALTER TABLE chat_bans ADD CONSTRAINT fk_cb_banned_by_setnull FOREIGN KEY (banned_by) REFERENCES users(id) ON DELETE SET NULL"
+
+  - changeSet:
+      id: 0003-chat-invitations
+      author: webchat
+      changes:
+        - createTable:
+            tableName: chat_invitations
+            columns:
+              - column: { name: id,          type: BIGSERIAL,   constraints: { primaryKey: true, nullable: false } }
+              - column: { name: chat_id,     type: BIGINT,      constraints: { nullable: false, foreignKeyName: fk_ci_chat, references: "chats(id)", deleteCascade: true } }
+              - column: { name: invitee_id,  type: BIGINT,      constraints: { nullable: false, foreignKeyName: fk_ci_invitee, references: "users(id)", deleteCascade: true } }
+              - column: { name: invited_by,  type: BIGINT,      constraints: { foreignKeyName: fk_ci_inviter, references: "users(id)" } }
+              - column: { name: created_at,  type: TIMESTAMPTZ, defaultValueComputed: "now()", constraints: { nullable: false } }
+              - column: { name: accepted_at, type: TIMESTAMPTZ }
+              - column: { name: declined_at, type: TIMESTAMPTZ }
+        - sql:
+            sql: "CREATE UNIQUE INDEX uq_chat_invitations_pending ON chat_invitations (chat_id, invitee_id) WHERE accepted_at IS NULL AND declined_at IS NULL"
+        - createIndex:
+            tableName: chat_invitations
+            indexName: idx_chat_invitations_invitee
+            columns:
+              - column: { name: invitee_id }

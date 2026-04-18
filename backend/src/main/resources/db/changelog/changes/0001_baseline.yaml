@@ -1,0 +1,8 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0001-baseline
+      author: webchat
+      changes:
+        - sql:
+            sql: "SELECT 1"
+            comment: "Baseline changeset; real schema starts in Phase 2."
