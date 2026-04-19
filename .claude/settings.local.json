@@ -32,7 +32,10 @@
       "Bash(npm ci *)",
       "Bash(npm install *)",
       "Bash(npx tsc *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(curl -sk -o /dev/null -w \"HTTP/%{http_version} %{http_code} scheme=%{scheme}\\\\n\" https://localhost/)",
+      "Bash(curl -s -o /dev/null -w \"HTTP/%{http_version} %{http_code} redirect=%{redirect_url}\\\\n\" http://localhost/)",
+      "Bash(git check-ignore *)"
     ]
   }
 }

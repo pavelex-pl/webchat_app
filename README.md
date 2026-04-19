@@ -20,11 +20,10 @@ See `docs/design.md` for the full architecture document (data model, API surface
 ## Run
 
 ```bash
-cp .env.example .env
 docker compose up --build
 ```
 
-Open http://localhost
+Open http://localhost. Defaults (DB password, JWT secret) are baked into `docker-compose.yml`. To override, copy `.env.example` → `.env` before running.
 
 Services:
 - `frontend` (nginx + built React) on port 80
