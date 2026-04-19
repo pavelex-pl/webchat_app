@@ -72,9 +72,9 @@ export default function Sidebar() {
         </NavLink>
       </div>
       <div className="px-3 pb-3 flex-1 overflow-y-auto">
-        <ChatSection title="Public rooms" q={publics} activeId={activeId} />
-        <ChatSection title="Private rooms" q={privates} activeId={activeId} />
         <ChatSection title="Direct messages" q={directs} activeId={activeId} />
+        <ChatSection title="Private rooms" q={privates} activeId={activeId} collapsible />
+        <ChatSection title="Public rooms" q={publics} activeId={activeId} collapsible />
       </div>
       {creating && <CreateRoomModal onClose={() => setCreating(false)} />}
     </aside>
@@ -87,36 +87,57 @@ function ChatSection({
   title,
   q,
   activeId,
+  collapsible = false,
 }: {
   title: string;
   q: ChatsInfiniteQuery;
   activeId?: number;
+  collapsible?: boolean;
 }) {
+  const [open, setOpen] = useState(true);
   const items = useMemo(
     () => (q.data?.pages ?? []).flatMap((p) => p.items),
     [q.data],
   );
   const sentinelRef = useInfiniteScrollSentinel<HTMLDivElement>(
-    q.hasNextPage,
+    open && q.hasNextPage,
     q.isFetchingNextPage,
     q.fetchNextPage,
   );
 
+  const header = collapsible ? (
+    <button
+      type="button"
+      onClick={() => setOpen((v) => !v)}
+      className="w-full flex items-center gap-1 text-[11px] uppercase tracking-wide text-slate-500 hover:text-slate-700 px-2 mb-1">
+      <span
+        aria-hidden
+        className={`inline-block transition-transform ${open ? "rotate-90" : ""}`}>
+        ▶
+      </span>
+      <span className="flex-1 text-left">{title}</span>
+    </button>
+  ) : (
+    <h3 className="text-[11px] uppercase tracking-wide text-slate-500 px-2 mb-1">{title}</h3>
+  );
+
   return (
     <section className="mt-3">
-      <h3 className="text-[11px] uppercase tracking-wide text-slate-500 px-2 mb-1">{title}</h3>
-      <div className="space-y-0.5">
-        {items.map((r) => (
-          <ChatLink key={r.id} chat={r} active={r.id === activeId} />
-        ))}
-        {q.isSuccess && items.length === 0 && (
-          <div className="text-xs text-slate-400 px-2 py-1">Empty</div>
-        )}
-        {q.hasNextPage && <div ref={sentinelRef} className="h-1" />}
-        {q.isFetchingNextPage && (
-          <div className="text-xs text-slate-400 px-2 py-1">Loading…</div>
-        )}
-      </div>
+      {header}
+      {open && (
+        <div className="space-y-0.5">
+          {items.map((r) => (
+            <ChatLink key={r.id} chat={r} active={r.id === activeId} />
+          ))}
+          {q.isSuccess && items.length === 0 && (
+            <div className="text-xs text-slate-400 px-2 py-1">Empty</div>
+          )}
+          {q.hasNextPage && <div ref={sentinelRef} className="h-1" />}
+          {q.isFetchingNextPage && (
+            <div className="text-xs text-slate-400 px-2 py-1">Loading…</div>
+          )}
+        </div>
+      )}
     </section>
   );
 }

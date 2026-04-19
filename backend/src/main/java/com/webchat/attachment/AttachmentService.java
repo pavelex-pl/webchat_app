@@ -1,10 +1,16 @@
 package com.webchat.attachment;
 
+import com.webchat.chat.Chat;
+import com.webchat.chat.ChatBanRepository;
 import com.webchat.chat.ChatMemberRepository;
 import com.webchat.chat.ChatPolicy;
+import com.webchat.chat.ChatRepository;
+import com.webchat.chat.ChatType;
+import com.webchat.chat.DirectChatService;
 import com.webchat.common.BadRequestException;
 import com.webchat.common.NotFoundException;
 import com.webchat.common.UnauthorizedException;
+import com.webchat.friends.FriendService;
 import java.io.IOException;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -19,13 +25,23 @@ public class AttachmentService {
 
     private final AttachmentRepository attachments;
     private final ChatMemberRepository members;
+    private final ChatBanRepository bans;
+    private final ChatRepository chats;
+    private final DirectChatService directs;
+    private final FriendService friends;
     private final ChatPolicy policy;
     private final FileStorage storage;
 
     public AttachmentService(AttachmentRepository attachments, ChatMemberRepository members,
+                             ChatBanRepository bans, ChatRepository chats,
+                             DirectChatService directs, FriendService friends,
                              ChatPolicy policy, FileStorage storage) {
         this.attachments = attachments;
         this.members = members;
+        this.bans = bans;
+        this.chats = chats;
+        this.directs = directs;
+        this.friends = friends;
         this.policy = policy;
         this.storage = storage;
     }
@@ -82,6 +98,20 @@ public class AttachmentService {
         // spec §2.6.4 — must be a current member of the chat
         if (!members.existsByIdChatIdAndIdUserId(a.getChatId(), userId)) {
             throw new UnauthorizedException("No access to this attachment");
+        }
+        // Defense in depth: an active ban on this room always denies.
+        if (bans.existsByIdChatIdAndIdUserId(a.getChatId(), userId)) {
+            throw new UnauthorizedException("No access to this attachment");
+        }
+        // DMs: if either side has blocked the other, deny.
+        Chat c = chats.findById(a.getChatId())
+                .orElseThrow(() -> new NotFoundException("Chat not found"));
+        if (c.getType() == ChatType.DIRECT) {
+            Long peerId = directs.peerId(a.getChatId(), userId);
+            // Read-only DMs (not friends or either side blocking) cannot download.
+            if (peerId == null || !friends.canMessage(userId, peerId)) {
+                throw new UnauthorizedException("No access to this attachment");
+            }
         }
         return a;
     }

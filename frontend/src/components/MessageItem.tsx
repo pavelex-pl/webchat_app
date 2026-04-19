@@ -9,12 +9,14 @@ export default function MessageItem({
   m,
   meId,
   yourRole,
+  readOnly,
   parent,
   onReply,
 }: {
   m: MessageDto;
   meId: number | undefined;
   yourRole: ChatRole | null;
+  readOnly: boolean;
   parent?: MessageDto;
   onReply: (m: MessageDto) => void;
 }) {
@@ -66,14 +68,14 @@ export default function MessageItem({
         </span>
         {m.editedAt && !m.deleted && <span className="text-xs text-slate-400">(edited)</span>}
         <div className="ml-auto opacity-0 group-hover:opacity-100 flex gap-3 text-xs">
-          {!m.deleted && (
+          {!m.deleted && !readOnly && (
             <button onClick={() => onReply(m)} className="text-slate-500 hover:text-slate-800">Reply</button>
           )}
-          {!m.deleted && isAuthor && (
+          {!m.deleted && !readOnly && isAuthor && (
             <button onClick={() => { setDraft(m.body ?? ""); setEditing(true); }}
                     className="text-slate-500 hover:text-slate-800">Edit</button>
           )}
-          {!m.deleted && canDelete && (
+          {!m.deleted && !readOnly && canDelete && (
             <button onClick={() => setConfirmDelete(true)} className="text-red-500 hover:text-red-700">Delete</button>
           )}
         </div>
@@ -95,7 +97,7 @@ export default function MessageItem({
           {m.body && (
             <div className="text-sm text-slate-800 whitespace-pre-wrap break-words">{m.body}</div>
           )}
-          <Attachments list={m.attachments ?? []} />
+          <Attachments list={m.attachments ?? []} readOnly={readOnly} />
         </>
       )}
       {confirmDelete && (

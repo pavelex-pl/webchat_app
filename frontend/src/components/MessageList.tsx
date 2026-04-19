@@ -15,11 +15,13 @@ const READ_DWELL_MS = 2500;
 export default function MessageList({
   chatId,
   yourRole,
+  readOnly,
   initialLastReadMessageId,
   onReply,
 }: {
   chatId: number;
   yourRole: ChatRole | null;
+  readOnly: boolean;
   initialLastReadMessageId: number | null;
   onReply: (m: MessageDto) => void;
 }) {
@@ -160,6 +162,7 @@ export default function MessageList({
               m={m}
               meId={meId}
               yourRole={yourRole}
+              readOnly={readOnly}
               parent={m.replyToId ? byId.get(m.replyToId) : undefined}
               onReply={onReply}
             />

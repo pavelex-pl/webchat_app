@@ -109,9 +109,16 @@ public class MessageService {
     public Message delete(Long userId, Long messageId) {
         Message m = messages.findById(messageId).orElseThrow(() -> new NotFoundException("Message not found"));
         if (m.isDeleted()) return m;
-        if (!userId.equals(m.getAuthorId())) {
-            Chat c = chats.findById(m.getChatId()).orElseThrow(() -> new NotFoundException("Chat not found"));
-            if (c.getType() == ChatType.DIRECT) throw new UnauthorizedException("Only the author can delete");
+        Chat c = chats.findById(m.getChatId()).orElseThrow(() -> new NotFoundException("Chat not found"));
+        if (c.getType() == ChatType.DIRECT) {
+            Long peerId = directs.peerId(m.getChatId(), userId);
+            if (peerId == null || !friends.canMessage(userId, peerId)) {
+                throw new UnauthorizedException("Direct chat is read-only: cannot delete messages");
+            }
+            if (!userId.equals(m.getAuthorId())) {
+                throw new UnauthorizedException("Only the author can delete");
+            }
+        } else if (!userId.equals(m.getAuthorId())) {
             ChatMember caller = policy.requireMembership(m.getChatId(), userId);
             if (caller.getRole() == ChatRole.MEMBER) throw new UnauthorizedException("Admin role required");
         }

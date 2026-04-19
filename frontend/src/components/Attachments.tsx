@@ -1,19 +1,27 @@
 import { useState } from "react";
 import type { AttachmentDto } from "../lib/messageTypes";
 
-export function Attachments({ list }: { list: AttachmentDto[] }) {
+export function Attachments({ list, readOnly = false }: { list: AttachmentDto[]; readOnly?: boolean }) {
   if (!list || list.length === 0) return null;
   return (
     <div className="mt-1 space-y-1">
       {list.map((a) => (a.mimeType.startsWith("image/")
-        ? <ImageAttachment key={a.id} a={a} />
-        : <FileAttachment key={a.id} a={a} />))}
+        ? <ImageAttachment key={a.id} a={a} readOnly={readOnly} />
+        : <FileAttachment key={a.id} a={a} readOnly={readOnly} />))}
     </div>
   );
 }
 
-function ImageAttachment({ a }: { a: AttachmentDto }) {
+function ImageAttachment({ a, readOnly }: { a: AttachmentDto; readOnly: boolean }) {
   const [expanded, setExpanded] = useState(false);
+  if (readOnly) {
+    return (
+      <div className="inline-block border rounded bg-slate-50 px-3 py-2 text-sm text-slate-500 italic">
+        Image unavailable in read-only conversation
+        {a.comment && <div className="text-xs text-slate-500 mt-0.5 not-italic">{a.comment}</div>}
+      </div>
+    );
+  }
   const url = `/api/attachments/${a.id}`;
   return (
     <div className="inline-block">
@@ -25,7 +33,17 @@ function ImageAttachment({ a }: { a: AttachmentDto }) {
   );
 }
 
-function FileAttachment({ a }: { a: AttachmentDto }) {
+function FileAttachment({ a, readOnly }: { a: AttachmentDto; readOnly: boolean }) {
+  if (readOnly) {
+    return (
+      <div className="inline-block border rounded bg-slate-50 px-3 py-2 text-sm">
+        <span className="font-medium text-slate-500 italic">{a.originalName}</span>
+        <span className="ml-2 text-xs text-slate-500">{humanSize(a.sizeBytes)}</span>
+        <div className="text-xs text-slate-500 mt-0.5">Download unavailable in read-only conversation</div>
+        {a.comment && <div className="text-xs text-slate-500 mt-0.5">{a.comment}</div>}
+      </div>
+    );
+  }
   return (
     <div className="inline-block border rounded bg-slate-50 px-3 py-2 text-sm">
       <a href={`/api/attachments/${a.id}`} download={a.originalName}

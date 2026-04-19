@@ -85,6 +85,7 @@ export default function ChatPage() {
         <MessageList
           chatId={chatId}
           yourRole={chat.yourRole}
+          readOnly={!canMessage}
           initialLastReadMessageId={chat.lastReadMessageId}
           onReply={setReplyTo}
         />
