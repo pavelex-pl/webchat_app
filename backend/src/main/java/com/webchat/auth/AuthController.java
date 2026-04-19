@@ -5,6 +5,7 @@ import com.webchat.auth.dto.LoginRequest;
 import com.webchat.auth.dto.PasswordChangeRequest;
 import com.webchat.auth.dto.PasswordResetConfirmRequest;
 import com.webchat.auth.dto.PasswordResetRequest;
+import com.webchat.auth.dto.PasswordResetResponse;
 import com.webchat.auth.dto.RegisterRequest;
 import com.webchat.auth.dto.UserResponse;
 import jakarta.servlet.http.HttpServletRequest;
@@ -59,9 +60,9 @@ public class AuthController {
     }
 
     @PostMapping("/password-reset/request")
-    public ResponseEntity<Void> passwordResetRequest(@Valid @RequestBody PasswordResetRequest req) {
-        auth.requestPasswordReset(req.email());
-        return ResponseEntity.accepted().build();
+    public ResponseEntity<PasswordResetResponse> passwordResetRequest(@Valid @RequestBody PasswordResetRequest req) {
+        String token = auth.requestPasswordReset(req.email());
+        return ResponseEntity.accepted().body(new PasswordResetResponse(token));
     }
 
     @PostMapping("/password-reset/confirm")

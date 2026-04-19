@@ -113,11 +113,11 @@ public class AuthService {
     }
 
     @Transactional
-    public void requestPasswordReset(String email) {
+    public String requestPasswordReset(String email) {
         Optional<User> maybe = users.findByEmail(email).filter(u -> u.getDeletedAt() == null);
         if (maybe.isEmpty()) {
             log.info("password reset requested for unknown email={} (ignored)", email);
-            return;
+            return null;
         }
         User u = maybe.get();
         byte[] bytes = new byte[32];
@@ -126,6 +126,7 @@ public class AuthService {
         String hash = refreshTokens.hash(token);
         resetTokens.save(new PasswordResetToken(hash, u.getId(), Instant.now().plus(RESET_TOKEN_TTL)));
         log.info("PASSWORD RESET LINK (demo only) userId={} token={}", u.getId(), token);
+        return token;
     }
 
     @Transactional
