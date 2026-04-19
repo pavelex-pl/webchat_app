@@ -38,6 +38,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
      * to derive the STOMP session Principal. Principal name = userId (string).
      */
     static class PrincipalHandshakeHandler extends DefaultHandshakeHandler {
+        private static final org.slf4j.Logger log =
+                org.slf4j.LoggerFactory.getLogger(PrincipalHandshakeHandler.class);
+
         @Override
         protected Principal determineUser(ServerHttpRequest request, WebSocketHandler wsHandler,
                                           Map<String, Object> attributes) {
@@ -45,8 +48,11 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
             if (auth != null && auth.getPrincipal() instanceof CurrentUser cu) {
                 attributes.put("userId", cu.userId());
                 attributes.put("sessionId", cu.sessionId());
+                log.info("WS handshake principal resolved userId={}", cu.userId());
                 return () -> String.valueOf(cu.userId());
             }
+            log.warn("WS handshake principal NOT resolved; auth={}, uri={}",
+                    auth, request.getURI());
             return null;
         }
     }

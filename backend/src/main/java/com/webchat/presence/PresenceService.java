@@ -10,7 +10,10 @@ public class PresenceService {
 
     static final Duration TAB_TTL = Duration.ofSeconds(120);
     static final long ONLINE_WINDOW_MS = 60_000;
-    static final long STALE_AFTER_MS = 120_000;
+    // A tab is considered alive as long as it has pinged within this window.
+    // The client pings every 15s, so 60s tolerates two missed pings before
+    // the tab is treated as closed (→ user offline if it was their last one).
+    static final long HEARTBEAT_GRACE_MS = 60_000;
 
     private final StringRedisTemplate redis;
 
@@ -18,31 +21,42 @@ public class PresenceService {
         this.redis = redis;
     }
 
-    private static String tabsKey(long userId) { return "presence:user:" + userId; }
+    private static String heartbeatKey(long userId) { return "presence:heartbeat:" + userId; }
+    private static String activityKey(long userId) { return "presence:activity:" + userId; }
     private static String statusKey(long userId) { return "presence:status:" + userId; }
     private static final String DIRTY_KEY = "presence:dirty";
 
     public void recordActivity(long userId, String tabId, long lastActivityAtMs) {
-        redis.opsForZSet().add(tabsKey(userId), tabId, lastActivityAtMs);
-        redis.expire(tabsKey(userId), TAB_TTL);
+        long now = System.currentTimeMillis();
+        redis.opsForZSet().add(heartbeatKey(userId), tabId, now);
+        redis.opsForZSet().add(activityKey(userId), tabId, lastActivityAtMs);
+        redis.expire(heartbeatKey(userId), TAB_TTL);
+        redis.expire(activityKey(userId), TAB_TTL);
         redis.opsForSet().add(DIRTY_KEY, String.valueOf(userId));
     }
 
     public void removeTab(long userId, String tabId) {
-        redis.opsForZSet().remove(tabsKey(userId), tabId);
+        redis.opsForZSet().remove(heartbeatKey(userId), tabId);
+        redis.opsForZSet().remove(activityKey(userId), tabId);
         redis.opsForSet().add(DIRTY_KEY, String.valueOf(userId));
     }
 
     public Status compute(long userId) {
         long now = System.currentTimeMillis();
-        String key = tabsKey(userId);
-        // prune stale entries first
-        redis.opsForZSet().removeRangeByScore(key, 0, now - STALE_AFTER_MS);
-        Long onlineCount = redis.opsForZSet().count(key, now - ONLINE_WINDOW_MS, Double.POSITIVE_INFINITY);
-        if (onlineCount != null && onlineCount > 0) return Status.ONLINE;
-        Long total = redis.opsForZSet().zCard(key);
-        if (total != null && total > 0) return Status.AFK;
-        return Status.OFFLINE;
+        String hb = heartbeatKey(userId);
+        String act = activityKey(userId);
+        // Drop tabs whose last heartbeat is too old to still be considered open.
+        Set<String> deadTabs = redis.opsForZSet().rangeByScore(hb, 0, now - HEARTBEAT_GRACE_MS);
+        if (deadTabs != null && !deadTabs.isEmpty()) {
+            redis.opsForZSet().remove(hb, deadTabs.toArray());
+            redis.opsForZSet().remove(act, deadTabs.toArray());
+        }
+        Long aliveTabs = redis.opsForZSet().zCard(hb);
+        if (aliveTabs == null || aliveTabs == 0) return Status.OFFLINE;
+        // Any alive tab with recent user activity → ONLINE, otherwise AFK.
+        Long recentActivity = redis.opsForZSet().count(act, now - ONLINE_WINDOW_MS, Double.POSITIVE_INFINITY);
+        if (recentActivity != null && recentActivity > 0) return Status.ONLINE;
+        return Status.AFK;
     }
 
     public Set<String> drainDirty() {

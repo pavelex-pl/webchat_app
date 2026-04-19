@@ -10,12 +10,13 @@ import java.util.Set;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.stereotype.Controller;
 
 @Controller
 public class PresenceController {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(PresenceController.class);
 
     private final PresenceService presence;
     private final PresenceSubscriptions subs;
@@ -29,23 +30,27 @@ public class PresenceController {
 
     @MessageMapping("/presence/ping")
     public void ping(@Payload PingRequest req, StompHeaderAccessor hdr, Principal principal) {
-        if (principal == null || req == null || req.tabId() == null) return;
+        if (principal == null) { log.warn("ping rejected: no principal session={}", hdr.getSessionId()); return; }
+        if (req == null || req.tabId() == null) { log.warn("ping rejected: bad payload principal={}", principal.getName()); return; }
         long userId = Long.parseLong(principal.getName());
         subs.registerTab(hdr.getSessionId(), userId, req.tabId());
         long ts = req.lastActivityAt() > 0 ? req.lastActivityAt() : System.currentTimeMillis();
         presence.recordActivity(userId, req.tabId(), ts);
+        log.info("ping userId={} tabId={} ts={}", userId, req.tabId(), ts);
     }
 
     @MessageMapping("/watch")
-    @SendToUser("/queue/presence")
-    public List<PresenceUpdate> watch(@Payload WatchRequest req, StompHeaderAccessor hdr, Principal principal) {
-        if (principal == null || req == null || req.userIds() == null) return List.of();
+    public void watch(@Payload WatchRequest req, StompHeaderAccessor hdr, Principal principal) {
+        if (principal == null) { log.warn("watch rejected: no principal session={}", hdr.getSessionId()); return; }
+        if (req == null || req.userIds() == null) return;
         long watcherId = Long.parseLong(principal.getName());
         Set<Long> targets = new HashSet<>(req.userIds());
         subs.addWatches(hdr.getSessionId(), watcherId, targets);
-        return targets.stream()
+        List<PresenceUpdate> updates = targets.stream()
                 .map(t -> new PresenceUpdate(t, presence.compute(t)))
                 .toList();
+        stomp.convertAndSend("/topic/user." + watcherId + ".presence", updates);
+        log.info("watch watcherId={} targets={} result={}", watcherId, targets, updates);
     }
 
     @MessageMapping("/unwatch")

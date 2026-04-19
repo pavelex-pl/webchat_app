@@ -38,7 +38,7 @@ public class PresenceScheduler {
         Set<Long> watchers = subs.watchersOf(targetUserId);
         PresenceUpdate update = new PresenceUpdate(targetUserId, status);
         for (Long watcherId : watchers) {
-            stomp.convertAndSendToUser(String.valueOf(watcherId), "/queue/presence", update);
+            stomp.convertAndSend("/topic/user." + watcherId + ".presence", update);
         }
     }
 }

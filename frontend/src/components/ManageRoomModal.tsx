@@ -7,6 +7,8 @@ import { useAuthStore } from "../stores/authStore";
 import ConfirmDialog from "./ConfirmDialog";
 import FormError from "./FormError";
 import Modal from "./Modal";
+import PresenceDot from "./PresenceDot";
+import { usePresenceStore } from "../stores/presenceStore";
 
 type Tab = "members" | "admins" | "bans" | "invitations" | "settings";
 
@@ -73,12 +75,18 @@ function MembersTab({ room }: { room: RoomDetail }) {
     <>
       <table className="w-full text-sm">
         <thead className="text-left text-xs uppercase text-slate-500">
-          <tr><th className="p-2">Username</th><th className="p-2">Role</th><th className="p-2">Actions</th></tr>
+          <tr>
+            <th className="p-2">Username</th>
+            <th className="p-2">Status</th>
+            <th className="p-2">Role</th>
+            <th className="p-2">Actions</th>
+          </tr>
         </thead>
         <tbody>
           {q.data?.map((m) => (
             <tr key={m.userId} className="border-t">
               <td className="p-2 font-mono">@{m.username}</td>
+              <td className="p-2"><MemberStatus userId={m.userId} /></td>
               <td className="p-2">{m.role}</td>
               <td className="p-2 space-x-2">
                 {room.yourRole === "OWNER" && m.role === "MEMBER" && m.userId !== meId && (
@@ -310,5 +318,16 @@ function SettingsTab({ room, onClose }: { room: RoomDetail; onClose: () => void 
         />
       )}
     </div>
+  );
+}
+
+function MemberStatus({ userId }: { userId: number }) {
+  const status = usePresenceStore((s) => s.statuses[userId]) ?? "OFFLINE";
+  const label = status === "ONLINE" ? "online" : status === "AFK" ? "away" : "offline";
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <PresenceDot userId={userId} />
+      <span className="text-slate-600">{label}</span>
+    </span>
   );
 }
