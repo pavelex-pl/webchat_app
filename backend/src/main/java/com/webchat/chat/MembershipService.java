@@ -5,6 +5,7 @@ import com.webchat.common.ConflictException;
 import com.webchat.common.NotFoundException;
 import com.webchat.common.UnauthorizedException;
 import java.util.List;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,15 +17,17 @@ public class MembershipService {
     private final ChatBanRepository bans;
     private final ChatInvitationRepository invitations;
     private final ChatPolicy policy;
+    private final ApplicationEventPublisher events;
 
     public MembershipService(ChatRepository chats, ChatMemberRepository members,
                              ChatBanRepository bans, ChatInvitationRepository invitations,
-                             ChatPolicy policy) {
+                             ChatPolicy policy, ApplicationEventPublisher events) {
         this.chats = chats;
         this.members = members;
         this.bans = bans;
         this.invitations = invitations;
         this.policy = policy;
+        this.events = events;
     }
 
     @Transactional
@@ -33,7 +36,9 @@ public class MembershipService {
         if (c.getType() != ChatType.PUBLIC_ROOM) throw new BadRequestException("Room is not public");
         if (bans.existsByIdChatIdAndIdUserId(chatId, userId)) throw new UnauthorizedException("You are banned from this room");
         if (members.existsByIdChatIdAndIdUserId(chatId, userId)) throw new ConflictException("Already a member");
-        return members.save(new ChatMember(chatId, userId, ChatRole.MEMBER));
+        ChatMember saved = members.save(new ChatMember(chatId, userId, ChatRole.MEMBER));
+        events.publishEvent(new ChatMembershipEvent(chatId, userId, ChatMembershipEvent.Kind.JOINED));
+        return saved;
     }
 
     @Transactional
@@ -43,6 +48,7 @@ public class MembershipService {
             throw new BadRequestException("Owner cannot leave; delete the room instead");
         }
         members.delete(m);
+        events.publishEvent(new ChatMembershipEvent(chatId, userId, ChatMembershipEvent.Kind.LEFT));
     }
 
     public List<ChatMember> list(Long userId, Long chatId) {
@@ -67,6 +73,7 @@ public class MembershipService {
         }
         invitations.findByChatIdAndInviteeIdAndAcceptedAtIsNullAndDeclinedAtIsNull(chatId, targetUserId)
                 .ifPresent(inv -> { inv.decline(); invitations.save(inv); });
+        events.publishEvent(new ChatMembershipEvent(chatId, targetUserId, ChatMembershipEvent.Kind.BANNED));
     }
 
     @Transactional

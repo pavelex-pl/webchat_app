@@ -77,11 +77,15 @@ public class InvitationService {
         if (bans.existsByIdChatIdAndIdUserId(inv.getChatId(), userId)) {
             throw new UnauthorizedException("You are banned from this room");
         }
-        if (!members.existsByIdChatIdAndIdUserId(inv.getChatId(), userId)) {
+        boolean newlyJoined = !members.existsByIdChatIdAndIdUserId(inv.getChatId(), userId);
+        if (newlyJoined) {
             members.save(new ChatMember(inv.getChatId(), userId, ChatRole.MEMBER));
         }
         inv.accept();
         events.publishEvent(new InvitationEvent(userId, inv.getChatId(), inv.getId(), InvitationEvent.Kind.ACCEPTED));
+        if (newlyJoined) {
+            events.publishEvent(new ChatMembershipEvent(inv.getChatId(), userId, ChatMembershipEvent.Kind.JOINED));
+        }
     }
 
     @Transactional
