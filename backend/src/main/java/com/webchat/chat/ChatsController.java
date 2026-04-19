@@ -8,6 +8,8 @@ import com.webchat.chat.dto.OpenDirectRequest;
 import com.webchat.common.NotFoundException;
 import com.webchat.friends.FriendService;
 import com.webchat.message.MessageRepository;
+import com.webchat.message.ReadMarkerId;
+import com.webchat.message.ReadMarkerRepository;
 import jakarta.validation.Valid;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -35,12 +37,14 @@ public class ChatsController {
     private final FriendService friends;
     private final UserLookup lookup;
     private final MessageRepository messages;
+    private final ReadMarkerRepository readMarkers;
     private final CurrentUserResolver currentUser;
 
     public ChatsController(ChatRepository chats, ChatMemberRepository members,
                            MembershipService memberships, DirectChatService directs,
                            FriendService friends, UserLookup lookup,
-                           MessageRepository messages, CurrentUserResolver currentUser) {
+                           MessageRepository messages, ReadMarkerRepository readMarkers,
+                           CurrentUserResolver currentUser) {
         this.chats = chats;
         this.members = members;
         this.memberships = memberships;
@@ -48,6 +52,7 @@ public class ChatsController {
         this.friends = friends;
         this.lookup = lookup;
         this.messages = messages;
+        this.readMarkers = readMarkers;
         this.currentUser = currentUser;
     }
 
@@ -101,6 +106,8 @@ public class ChatsController {
             throw new com.webchat.common.UnauthorizedException("No access to this chat");
         }
         ChatRole yourRole = members.findByIdChatIdAndIdUserId(id, uid).map(ChatMember::getRole).orElse(null);
+        Long lastRead = readMarkers.findById(new ReadMarkerId(id, uid))
+                .map(rm -> rm.getLastReadMessageId()).orElse(null);
         if (c.getType() == ChatType.DIRECT) {
             Long peerId = directs.peerId(id, uid);
             String peerUsername = peerId == null ? null : lookup.usernameOr(peerId, null);
@@ -108,13 +115,13 @@ public class ChatsController {
             return new ChatDetailResponse(
                     c.getId(), c.getType(), null, null, null, null,
                     memberships.memberCount(id), yourRole,
-                    peerId, peerUsername, canMsg);
+                    peerId, peerUsername, canMsg, lastRead);
         }
         return new ChatDetailResponse(
                 c.getId(), c.getType(), c.getName(), c.getDescription(),
                 c.getOwnerId(), lookup.usernameOr(c.getOwnerId(), null),
                 memberships.memberCount(id), yourRole,
-                null, null, null);
+                null, null, null, lastRead);
     }
 
     @PostMapping("/direct")

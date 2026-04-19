@@ -124,12 +124,15 @@ public class MessageService {
     @Transactional
     public void markRead(Long userId, Long chatId, Long lastReadMessageId) {
         policy.requireMembership(chatId, userId);
-        ReadMarker rm = readMarkers.findById(new ReadMarkerId(chatId, userId))
-                .orElseGet(() -> new ReadMarker(chatId, userId, lastReadMessageId));
-        if (rm.getLastReadMessageId() == null || lastReadMessageId > rm.getLastReadMessageId()) {
+        var existing = readMarkers.findById(new ReadMarkerId(chatId, userId));
+        ReadMarker rm = existing.orElseGet(() -> new ReadMarker(chatId, userId, lastReadMessageId));
+        Long prev = existing.map(ReadMarker::getLastReadMessageId).orElse(null);
+        boolean advanced = prev == null || lastReadMessageId > prev;
+        if (advanced) {
             rm.setLastReadMessageId(lastReadMessageId);
+            readMarkers.save(rm);
+            events.publishEvent(new MessageReadEvent(userId, chatId, lastReadMessageId));
         }
-        readMarkers.save(rm);
     }
 
     private static void validateBody(String body) {

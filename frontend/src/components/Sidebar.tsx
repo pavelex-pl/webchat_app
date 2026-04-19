@@ -92,13 +92,10 @@ function ChatLink({ chat, active }: { chat: ChatSummary; active: boolean }) {
         active ? "bg-slate-200 text-slate-900" : "text-slate-700 hover:bg-slate-50"
       }`}>
       {isDm && chat.peerUserId != null && <PresenceDot userId={chat.peerUserId} />}
-      <span className={`truncate ${unread > 0 && !active ? "font-semibold text-slate-900" : ""}`}>
+      <span className={`truncate flex-1 ${unread > 0 ? "font-semibold text-slate-900" : ""}`}>
         {isDm ? `@ ${chat.peerUsername ?? "(unknown)"}` : `# ${chat.name}`}
       </span>
-      {!isDm && (
-        <span className="ml-auto text-slate-400 text-xs">({chat.memberCount})</span>
-      )}
-      {unread > 0 && !active && (
+      {unread > 0 && (
         <span className="ml-1 inline-flex items-center justify-center bg-red-600 text-white rounded-full px-1.5 text-xs min-w-[18px]">
           {unread > 99 ? "99+" : unread}
         </span>

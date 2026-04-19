@@ -66,7 +66,12 @@ export default function ChatPage() {
             )}
           </div>
         </header>
-        <MessageList chatId={chatId} yourRole={chat.yourRole} onReply={setReplyTo} />
+        <MessageList
+          chatId={chatId}
+          yourRole={chat.yourRole}
+          initialLastReadMessageId={chat.lastReadMessageId}
+          onReply={setReplyTo}
+        />
         {canMessage ? (
           <Composer chatId={chatId} replyTo={replyTo} onClearReply={() => setReplyTo(null)} />
         ) : (

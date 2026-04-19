@@ -1,21 +1,24 @@
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
 import type { ChatEvent, MessageDto } from "../lib/messageTypes";
-import type { ChatRole } from "../lib/types";
+import type { ChatDetail, ChatRole } from "../lib/types";
 import { ws } from "../lib/ws";
 import { useAuthStore } from "../stores/authStore";
 import MessageItem from "./MessageItem";
 
 const PAGE = 50;
+const READ_GRACE_MS = 3000;
 
 export default function MessageList({
   chatId,
   yourRole,
+  initialLastReadMessageId,
   onReply,
 }: {
   chatId: number;
   yourRole: ChatRole | null;
+  initialLastReadMessageId: number | null;
   onReply: (m: MessageDto) => void;
 }) {
   const meId = useAuthStore((s) => s.me?.id);
@@ -23,6 +26,10 @@ export default function MessageList({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickToBottom = useRef(true);
   const prevHeight = useRef(0);
+
+  // Frozen on mount so new incoming messages don't shift the divider.
+  const [frozenLastRead] = useState<number | null>(initialLastReadMessageId);
+  const [graceEnded, setGraceEnded] = useState(false);
 
   const queryKey = ["messages", chatId];
   const q = useInfiniteQuery({
@@ -49,17 +56,13 @@ export default function MessageList({
         if (!data) return data;
         const pages = data.pages.map((page) => page.slice());
         if (ev.kind === "created") {
-          // prepend into newest page (page 0 is newest)
           if (!pages[0]?.some((m) => m.id === ev.message.id)) {
             pages[0] = [ev.message, ...(pages[0] ?? [])];
           }
         } else {
           for (let i = 0; i < pages.length; i++) {
             const idx = pages[i].findIndex((m) => m.id === ev.message.id);
-            if (idx >= 0) {
-              pages[i][idx] = ev.message;
-              break;
-            }
+            if (idx >= 0) { pages[i][idx] = ev.message; break; }
           }
         }
         return { ...data, pages };
@@ -68,15 +71,27 @@ export default function MessageList({
     return unsub;
   }, [chatId, qc]);
 
-  // Mark as read whenever the latest message id changes; refresh sidebar unread count after.
+  // 3-second grace per chat. After it elapses we hide the divider and mark as read.
   useEffect(() => {
-    if (all.length > 0) {
-      const lastId = all[all.length - 1].id;
-      api.post(`/api/chats/${chatId}/read`, { lastReadMessageId: lastId })
-        .then(() => qc.invalidateQueries({ queryKey: ["chats"] }))
-        .catch(() => undefined);
-    }
-  }, [all.length, chatId, qc]);
+    setGraceEnded(false);
+    const handle = window.setTimeout(() => setGraceEnded(true), READ_GRACE_MS);
+    return () => window.clearTimeout(handle);
+  }, [chatId]);
+
+  // Mark as read once grace ends, and again whenever a newer message lands.
+  useEffect(() => {
+    if (!graceEnded || all.length === 0) return;
+    const lastId = all[all.length - 1].id;
+    api.post(`/api/chats/${chatId}/read`, { lastReadMessageId: lastId })
+      .then(() => {
+        qc.invalidateQueries({ queryKey: ["chats"] });
+        // keep the chat-detail cache in sync so a future re-visit freezes the
+        // up-to-date lastReadMessageId and no stale divider appears.
+        qc.setQueryData(["chat", chatId], (old: ChatDetail | undefined) =>
+          old ? { ...old, lastReadMessageId: lastId } : old);
+      })
+      .catch(() => undefined);
+  }, [graceEnded, all.length, chatId, qc]);
 
   // Stick-to-bottom behavior
   useLayoutEffect(() => {
@@ -85,7 +100,6 @@ export default function MessageList({
     if (stickToBottom.current) {
       el.scrollTop = el.scrollHeight;
     } else {
-      // preserve visual anchor after prepending older messages
       el.scrollTop = el.scrollHeight - prevHeight.current;
     }
     prevHeight.current = el.scrollHeight;
@@ -105,6 +119,16 @@ export default function MessageList({
 
   const byId = useMemo(() => new Map(all.map((m) => [m.id, m])), [all]);
 
+  // Show divider before the first message we haven't read yet (authored by
+  // someone else). A null read marker is treated as 0 so first visits still
+  // get the separator. Hidden once the 3-second grace window elapses.
+  const dividerBeforeId = useMemo(() => {
+    if (graceEnded) return null;
+    const reference = frozenLastRead ?? 0;
+    const firstUnread = all.find((m) => m.id > reference && m.authorId !== meId);
+    return firstUnread ? firstUnread.id : null;
+  }, [graceEnded, frozenLastRead, all, meId]);
+
   return (
     <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto bg-white">
       {q.isFetchingNextPage && (
@@ -120,16 +144,28 @@ export default function MessageList({
       )}
       <div className="py-2">
         {all.map((m) => (
-          <MessageItem
-            key={m.id}
-            m={m}
-            meId={meId}
-            yourRole={yourRole}
-            parent={m.replyToId ? byId.get(m.replyToId) : undefined}
-            onReply={onReply}
-          />
+          <Fragment key={m.id}>
+            {dividerBeforeId === m.id && <NewMessagesDivider />}
+            <MessageItem
+              m={m}
+              meId={meId}
+              yourRole={yourRole}
+              parent={m.replyToId ? byId.get(m.replyToId) : undefined}
+              onReply={onReply}
+            />
+          </Fragment>
         ))}
       </div>
+    </div>
+  );
+}
+
+function NewMessagesDivider() {
+  return (
+    <div className="flex items-center gap-2 px-4 py-2 my-1">
+      <div className="flex-1 h-px bg-red-400" />
+      <span className="text-xs font-medium text-red-500 uppercase tracking-wide">New messages</span>
+      <div className="flex-1 h-px bg-red-400" />
     </div>
   );
 }

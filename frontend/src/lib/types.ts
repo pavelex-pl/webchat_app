@@ -35,6 +35,7 @@ export type ChatDetail = {
   peerUserId: number | null;
   peerUsername: string | null;
   canMessage: boolean | null;
+  lastReadMessageId: number | null;
 };
 
 export type RoomDetail = {

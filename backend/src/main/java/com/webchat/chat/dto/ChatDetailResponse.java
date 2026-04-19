@@ -14,5 +14,6 @@ public record ChatDetailResponse(
         ChatRole yourRole,
         Long peerUserId,
         String peerUsername,
-        Boolean canMessage
+        Boolean canMessage,
+        Long lastReadMessageId
 ) {}
