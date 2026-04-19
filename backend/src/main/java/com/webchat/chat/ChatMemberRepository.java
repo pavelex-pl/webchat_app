@@ -15,7 +15,12 @@ public interface ChatMemberRepository extends JpaRepository<ChatMember, ChatMemb
     @Query("""
            SELECT m FROM ChatMember m
            WHERE m.id.chatId = :chatId
-           ORDER BY m.role ASC, m.joinedAt ASC, m.id.userId ASC
+           ORDER BY CASE m.role
+                      WHEN com.webchat.chat.ChatRole.OWNER THEN 0
+                      WHEN com.webchat.chat.ChatRole.ADMIN THEN 1
+                      ELSE 2
+                    END ASC,
+                    m.joinedAt ASC, m.id.userId ASC
            """)
     Page<ChatMember> findByChatIdOrdered(@Param("chatId") Long chatId, Pageable pageable);
 
@@ -29,7 +34,11 @@ public interface ChatMemberRepository extends JpaRepository<ChatMember, ChatMemb
            SELECT m FROM ChatMember m
            WHERE m.id.chatId = :chatId
              AND m.role IN (com.webchat.chat.ChatRole.OWNER, com.webchat.chat.ChatRole.ADMIN)
-           ORDER BY m.role ASC, m.joinedAt ASC, m.id.userId ASC
+           ORDER BY CASE m.role
+                      WHEN com.webchat.chat.ChatRole.OWNER THEN 0
+                      ELSE 1
+                    END ASC,
+                    m.joinedAt ASC, m.id.userId ASC
            """)
     List<ChatMember> findStaffByChatId(@Param("chatId") Long chatId);
 

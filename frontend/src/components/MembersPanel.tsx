@@ -110,6 +110,21 @@ export default function MembersPanel({ room }: { room: RoomDetail }) {
       <div className="text-xs text-slate-500 mt-1">{room.type === "PUBLIC_ROOM" ? "Public room" : "Private room"}</div>
       <div className="text-xs text-slate-500">Owner: <span className="font-mono">{room.ownerUsername ?? "—"}</span></div>
 
+      {canManage && (
+        <button
+          onClick={() => setManaging(true)}
+          className="mt-3 w-full border rounded px-3 py-1.5 text-sm">
+          Manage room
+        </button>
+      )}
+      {canInvite && (
+        <button
+          onClick={() => setInviting(true)}
+          className={`${canManage ? "mt-2" : "mt-3"} w-full border rounded px-3 py-1.5 text-sm`}>
+          Invite user
+        </button>
+      )}
+
       <h3 className="text-sm font-semibold text-slate-700 mt-4 mb-1">
         Members <span className="text-slate-400 font-normal">({membersTotal})</span>
       </h3>
@@ -166,20 +181,6 @@ export default function MembersPanel({ room }: { room: RoomDetail }) {
       {membersQ.hasNextPage && <div ref={membersSentinelRef} className="h-1" />}
       {membersQ.isFetchingNextPage && (
         <div className="text-xs text-slate-400 py-1">Loading…</div>
-      )}
-      {canInvite && (
-        <button
-          onClick={() => setInviting(true)}
-          className="mt-4 w-full border rounded px-3 py-1.5 text-sm">
-          Invite user
-        </button>
-      )}
-      {canManage && (
-        <button
-          onClick={() => setManaging(true)}
-          className={`${canInvite ? "mt-2" : "mt-4"} w-full border rounded px-3 py-1.5 text-sm`}>
-          Manage room
-        </button>
       )}
       {managing && <ManageRoomModal room={room} onClose={() => setManaging(false)} />}
       {inviting && (
