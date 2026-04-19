@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Attachments } from "./Attachments";
+import ConfirmDialog from "./ConfirmDialog";
 import { ApiError, api } from "../lib/api";
 import type { MessageDto } from "../lib/messageTypes";
 import type { ChatRole } from "../lib/types";
@@ -21,6 +22,7 @@ export default function MessageItem({
   const [draft, setDraft] = useState(m.body ?? "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const isAuthor = meId != null && meId === m.authorId;
   const canDelete = isAuthor || yourRole === "OWNER" || yourRole === "ADMIN";
@@ -39,7 +41,7 @@ export default function MessageItem({
   }
 
   async function del() {
-    if (!confirm("Delete this message?")) return;
+    setConfirmDelete(false);
     try {
       await api.delete(`/api/messages/${m.id}`);
     } catch (e) {
@@ -72,7 +74,7 @@ export default function MessageItem({
                     className="text-slate-500 hover:text-slate-800">Edit</button>
           )}
           {!m.deleted && canDelete && (
-            <button onClick={del} className="text-red-500 hover:text-red-700">Delete</button>
+            <button onClick={() => setConfirmDelete(true)} className="text-red-500 hover:text-red-700">Delete</button>
           )}
         </div>
       </div>
@@ -95,6 +97,16 @@ export default function MessageItem({
           )}
           <Attachments list={m.attachments ?? []} />
         </>
+      )}
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete message"
+          message="Delete this message? This cannot be undone."
+          confirmLabel="Delete"
+          danger
+          onConfirm={del}
+          onCancel={() => setConfirmDelete(false)}
+        />
       )}
     </div>
   );

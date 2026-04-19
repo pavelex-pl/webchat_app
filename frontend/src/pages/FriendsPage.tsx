@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import ConfirmDialog from "../components/ConfirmDialog";
 import FormError from "../components/FormError";
 import PresenceDot from "../components/PresenceDot";
 import { ApiError, api } from "../lib/api";
@@ -104,6 +105,8 @@ function CurrentFriends() {
   const qc = useQueryClient();
   const nav = useNavigate();
   const q = useQuery({ queryKey: ["friends"], queryFn: () => api.get<Friendship[]>("/api/friends") });
+  const [removeTarget, setRemoveTarget] = useState<Friendship | null>(null);
+  const [blockTarget, setBlockTarget] = useState<Friendship | null>(null);
 
   const openDm = useMutation({
     mutationFn: (username: string) => api.post<ChatDetail>("/api/chats/direct", { username }),
@@ -111,13 +114,14 @@ function CurrentFriends() {
   });
   const remove = useMutation({
     mutationFn: (id: number) => api.delete(`/api/friends/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["friends"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["friends"] }); setRemoveTarget(null); },
   });
   const block = useMutation({
     mutationFn: (id: number) => api.post(`/api/friends/block/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["friends"] });
       qc.invalidateQueries({ queryKey: ["friends", "blocks"] });
+      setBlockTarget(null);
     },
   });
 
@@ -128,11 +132,41 @@ function CurrentFriends() {
         <Row key={f.userId} name={f.username} userId={f.userId} right={
           <>
             <button onClick={() => openDm.mutate(f.username)} className="px-2 py-1 bg-slate-800 text-white rounded text-xs">Message</button>
-            <button onClick={() => remove.mutate(f.userId)} className="px-2 py-1 border rounded text-xs">Remove</button>
-            <button onClick={() => block.mutate(f.userId)} className="px-2 py-1 text-red-600 border border-red-300 rounded text-xs">Block</button>
+            <button onClick={() => setRemoveTarget(f)} className="px-2 py-1 border rounded text-xs">Remove</button>
+            <button onClick={() => setBlockTarget(f)} className="px-2 py-1 text-red-600 border border-red-300 rounded text-xs">Block</button>
           </>
         } />
       ))}
+      {removeTarget && (
+        <ConfirmDialog
+          title="Remove friend"
+          message={
+            <>
+              Remove <span className="font-mono">@{removeTarget.username}</span> from your friends? You
+              will need to send a new friend request to message them again.
+            </>
+          }
+          confirmLabel="Remove"
+          onConfirm={() => remove.mutate(removeTarget.userId)}
+          onCancel={() => setRemoveTarget(null)}
+        />
+      )}
+      {blockTarget && (
+        <ConfirmDialog
+          title="Block user"
+          message={
+            <>
+              Block <span className="font-mono">@{blockTarget.username}</span>? You will no longer be
+              friends, new direct messages between you will be blocked, and your existing chat history
+              will become read-only.
+            </>
+          }
+          confirmLabel="Block"
+          danger
+          onConfirm={() => block.mutate(blockTarget.userId)}
+          onCancel={() => setBlockTarget(null)}
+        />
+      )}
     </Section>
   );
 }

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Composer from "../components/Composer";
+import ConfirmDialog from "../components/ConfirmDialog";
 import MembersPanel from "../components/MembersPanel";
 import MessageList from "../components/MessageList";
 import { ApiError, api } from "../lib/api";
@@ -14,6 +15,7 @@ export default function ChatPage() {
   const qc = useQueryClient();
   const nav = useNavigate();
   const [replyTo, setReplyTo] = useState<MessageDto | null>(null);
+  const [confirmLeave, setConfirmLeave] = useState(false);
 
   const q = useQuery({
     queryKey: ["chat", chatId],
@@ -62,7 +64,7 @@ export default function ChatPage() {
           </div>
           <div className="flex items-center gap-3 text-sm">
             {!isDirect && chat.yourRole && chat.yourRole !== "OWNER" && (
-              <button onClick={() => leave.mutate()} className="text-red-600 hover:underline">Leave</button>
+              <button onClick={() => setConfirmLeave(true)} className="text-red-600 hover:underline">Leave</button>
             )}
           </div>
         </header>
@@ -81,6 +83,21 @@ export default function ChatPage() {
         )}
       </section>
       {roomForPanel && <MembersPanel room={roomForPanel} />}
+      {confirmLeave && !isDirect && chat.name && (
+        <ConfirmDialog
+          title="Leave room"
+          message={
+            <>
+              Leave <span className="font-mono">#{chat.name}</span>? You will stop receiving messages from
+              this room until you rejoin.
+            </>
+          }
+          confirmLabel="Leave"
+          danger
+          onConfirm={() => { setConfirmLeave(false); leave.mutate(); }}
+          onCancel={() => setConfirmLeave(false)}
+        />
+      )}
     </div>
   );
 }

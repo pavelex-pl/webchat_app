@@ -3,6 +3,8 @@ import { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError, api } from "../lib/api";
 import type { Ban, ChatType, Invitation, Member, RoomDetail } from "../lib/types";
+import { useAuthStore } from "../stores/authStore";
+import ConfirmDialog from "./ConfirmDialog";
 import FormError from "./FormError";
 import Modal from "./Modal";
 
@@ -40,6 +42,9 @@ export default function ManageRoomModal({ room, onClose }: { room: RoomDetail; o
 
 function MembersTab({ room }: { room: RoomDetail }) {
   const qc = useQueryClient();
+  const meId = useAuthStore((s) => s.me?.id);
+  const [kickTarget, setKickTarget] = useState<Member | null>(null);
+  const [demoteTarget, setDemoteTarget] = useState<Member | null>(null);
   const q = useQuery({
     queryKey: ["room", room.id, "members"],
     queryFn: () => api.get<Member[]>(`/api/rooms/${room.id}/members`),
@@ -49,6 +54,7 @@ function MembersTab({ room }: { room: RoomDetail }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["room", room.id, "members"] });
       qc.invalidateQueries({ queryKey: ["room", room.id, "bans"] });
+      setKickTarget(null);
     },
   });
   const promote = useMutation({
@@ -57,34 +63,72 @@ function MembersTab({ room }: { room: RoomDetail }) {
   });
   const demote = useMutation({
     mutationFn: (userId: number) => api.delete(`/api/rooms/${room.id}/admins/${userId}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["room", room.id, "members"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["room", room.id, "members"] });
+      setDemoteTarget(null);
+    },
   });
 
   return (
-    <table className="w-full text-sm">
-      <thead className="text-left text-xs uppercase text-slate-500">
-        <tr><th className="p-2">Username</th><th className="p-2">Role</th><th className="p-2">Actions</th></tr>
-      </thead>
-      <tbody>
-        {q.data?.map((m) => (
-          <tr key={m.userId} className="border-t">
-            <td className="p-2 font-mono">@{m.username}</td>
-            <td className="p-2">{m.role}</td>
-            <td className="p-2 space-x-2">
-              {room.yourRole === "OWNER" && m.role === "MEMBER" && (
-                <button onClick={() => promote.mutate(m.userId)} className="text-slate-700 hover:underline">Make admin</button>
-              )}
-              {m.role === "ADMIN" && (
-                <button onClick={() => demote.mutate(m.userId)} className="text-slate-700 hover:underline">Remove admin</button>
-              )}
-              {m.role !== "OWNER" && (
-                <button onClick={() => kick.mutate(m.userId)} className="text-red-600 hover:underline">Kick &amp; ban</button>
-              )}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <>
+      <table className="w-full text-sm">
+        <thead className="text-left text-xs uppercase text-slate-500">
+          <tr><th className="p-2">Username</th><th className="p-2">Role</th><th className="p-2">Actions</th></tr>
+        </thead>
+        <tbody>
+          {q.data?.map((m) => (
+            <tr key={m.userId} className="border-t">
+              <td className="p-2 font-mono">@{m.username}</td>
+              <td className="p-2">{m.role}</td>
+              <td className="p-2 space-x-2">
+                {room.yourRole === "OWNER" && m.role === "MEMBER" && m.userId !== meId && (
+                  <button onClick={() => promote.mutate(m.userId)} className="text-slate-700 hover:underline">Make admin</button>
+                )}
+                {m.role === "ADMIN" && m.userId !== meId && (
+                  <button onClick={() => setDemoteTarget(m)} className="text-slate-700 hover:underline">Remove admin</button>
+                )}
+                {m.role !== "OWNER" && m.userId !== meId && (
+                  <button
+                    onClick={() => setKickTarget(m)}
+                    className="text-red-600 hover:underline">
+                    Kick &amp; ban
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {kickTarget && (
+        <ConfirmDialog
+          title="Kick and ban user"
+          message={
+            <>
+              Kick and ban <span className="font-mono">@{kickTarget.username}</span> from{" "}
+              <span className="font-mono">#{room.name}</span>? They will not be able to rejoin until unbanned.
+            </>
+          }
+          confirmLabel="Kick & ban"
+          danger
+          onConfirm={() => kick.mutate(kickTarget.userId)}
+          onCancel={() => setKickTarget(null)}
+        />
+      )}
+      {demoteTarget && (
+        <ConfirmDialog
+          title="Remove admin role"
+          message={
+            <>
+              Remove admin role from <span className="font-mono">@{demoteTarget.username}</span>? They will
+              remain a member but lose moderation privileges.
+            </>
+          }
+          confirmLabel="Remove admin"
+          onConfirm={() => demote.mutate(demoteTarget.userId)}
+          onCancel={() => setDemoteTarget(null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -197,6 +241,7 @@ function SettingsTab({ room, onClose }: { room: RoomDetail; onClose: () => void 
   const [description, setDescription] = useState(room.description ?? "");
   const [type, setType] = useState<ChatType>(room.type);
   const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const save = useMutation({
     mutationFn: () => api.patch<RoomDetail>(`/api/rooms/${room.id}`, { name, description, type }),
@@ -240,7 +285,7 @@ function SettingsTab({ room, onClose }: { room: RoomDetail; onClose: () => void 
         </label>
       </fieldset>
       <div className="flex gap-2 justify-between pt-3 border-t">
-        <button onClick={() => { if (confirm("Delete room permanently?")) del.mutate(); }}
+        <button onClick={() => setConfirmDelete(true)}
                 className="px-3 py-1.5 bg-red-600 text-white rounded text-sm">
           Delete room
         </button>
@@ -249,6 +294,21 @@ function SettingsTab({ room, onClose }: { room: RoomDetail; onClose: () => void 
           Save changes
         </button>
       </div>
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete room"
+          message={
+            <>
+              Permanently delete <span className="font-mono">#{room.name}</span>? All messages, files,
+              and images in this room will be deleted. This cannot be undone.
+            </>
+          }
+          confirmLabel="Delete room"
+          danger
+          onConfirm={() => { setConfirmDelete(false); del.mutate(); }}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
     </div>
   );
 }

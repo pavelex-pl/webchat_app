@@ -57,10 +57,10 @@ public class MembershipService {
     @Transactional
     public void kickAndBan(Long adminId, Long chatId, Long targetUserId) {
         policy.requireAdmin(chatId, adminId);
+        if (adminId.equals(targetUserId)) throw new BadRequestException("You cannot ban yourself; use leave instead");
         ChatMember target = members.findByIdChatIdAndIdUserId(chatId, targetUserId)
                 .orElseThrow(() -> new NotFoundException("Member not found"));
         if (target.getRole() == ChatRole.OWNER) throw new BadRequestException("Cannot remove the owner");
-        if (adminId.equals(targetUserId)) throw new BadRequestException("Use leave to exit yourself");
         members.delete(target);
         if (!bans.existsByIdChatIdAndIdUserId(chatId, targetUserId)) {
             bans.save(new ChatBan(chatId, targetUserId, adminId));
@@ -94,6 +94,7 @@ public class MembershipService {
     @Transactional
     public void demoteAdmin(Long callerId, Long chatId, Long targetUserId) {
         policy.requireAdmin(chatId, callerId);
+        if (callerId.equals(targetUserId)) throw new BadRequestException("You cannot remove your own admin role");
         ChatMember target = members.findByIdChatIdAndIdUserId(chatId, targetUserId)
                 .orElseThrow(() -> new NotFoundException("Member not found"));
         if (target.getRole() == ChatRole.OWNER) throw new BadRequestException("Owner cannot be demoted");
