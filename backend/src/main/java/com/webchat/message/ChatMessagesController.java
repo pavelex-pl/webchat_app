@@ -52,4 +52,10 @@ public class ChatMessagesController {
         messages.markRead(currentUser.require().userId(), chatId, req.lastReadMessageId());
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/read-all")
+    public ResponseEntity<Void> readAll(@PathVariable Long chatId) {
+        messages.markAllRead(currentUser.require().userId(), chatId);
+        return ResponseEntity.noContent().build();
+    }
 }

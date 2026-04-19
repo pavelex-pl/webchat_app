@@ -1,14 +1,17 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, useState } from "react";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { FormEvent, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError, api } from "../lib/api";
-import type { Ban, ChatType, Invitation, Member, RoomDetail } from "../lib/types";
+import type { Ban, ChatType, Invitation, Member, Page, RoomDetail } from "../lib/types";
 import { useAuthStore } from "../stores/authStore";
+import { useInfiniteScrollSentinel } from "../lib/useInfiniteScrollSentinel";
 import ConfirmDialog from "./ConfirmDialog";
 import FormError from "./FormError";
 import Modal from "./Modal";
 import PresenceDot from "./PresenceDot";
 import { usePresenceStore } from "../stores/presenceStore";
+
+const MEMBERS_PAGE = 50;
 
 type Tab = "members" | "admins" | "bans" | "invitations" | "settings";
 
@@ -47,26 +50,46 @@ function MembersTab({ room }: { room: RoomDetail }) {
   const meId = useAuthStore((s) => s.me?.id);
   const [kickTarget, setKickTarget] = useState<Member | null>(null);
   const [demoteTarget, setDemoteTarget] = useState<Member | null>(null);
-  const q = useQuery({
+  const q = useInfiniteQuery({
     queryKey: ["room", room.id, "members"],
-    queryFn: () => api.get<Member[]>(`/api/rooms/${room.id}/members`),
+    queryFn: ({ pageParam = 0 }) =>
+      api.get<Page<Member>>(
+        `/api/rooms/${room.id}/members?page=${pageParam}&size=${MEMBERS_PAGE}`,
+      ),
+    initialPageParam: 0,
+    getNextPageParam: (last) =>
+      (last.page + 1) * last.size < last.total ? last.page + 1 : undefined,
   });
+  const members = useMemo(
+    () => (q.data?.pages ?? []).flatMap((p) => p.items),
+    [q.data],
+  );
+  const sentinelRef = useInfiniteScrollSentinel<HTMLTableRowElement>(
+    q.hasNextPage,
+    q.isFetchingNextPage,
+    q.fetchNextPage,
+  );
   const kick = useMutation({
     mutationFn: (userId: number) => api.delete(`/api/rooms/${room.id}/members/${userId}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["room", room.id, "members"] });
+      qc.invalidateQueries({ queryKey: ["room", room.id, "staff"] });
       qc.invalidateQueries({ queryKey: ["room", room.id, "bans"] });
       setKickTarget(null);
     },
   });
   const promote = useMutation({
     mutationFn: (userId: number) => api.post(`/api/rooms/${room.id}/admins/${userId}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["room", room.id, "members"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["room", room.id, "members"] });
+      qc.invalidateQueries({ queryKey: ["room", room.id, "staff"] });
+    },
   });
   const demote = useMutation({
     mutationFn: (userId: number) => api.delete(`/api/rooms/${room.id}/admins/${userId}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["room", room.id, "members"] });
+      qc.invalidateQueries({ queryKey: ["room", room.id, "staff"] });
       setDemoteTarget(null);
     },
   });
@@ -83,7 +106,7 @@ function MembersTab({ room }: { room: RoomDetail }) {
           </tr>
         </thead>
         <tbody>
-          {q.data?.map((m) => (
+          {members.map((m) => (
             <tr key={m.userId} className="border-t">
               <td className="p-2 font-mono">@{m.username}</td>
               <td className="p-2"><MemberStatus userId={m.userId} /></td>
@@ -105,6 +128,16 @@ function MembersTab({ room }: { room: RoomDetail }) {
               </td>
             </tr>
           ))}
+          {q.hasNextPage && (
+            <tr ref={sentinelRef}>
+              <td colSpan={4} className="h-1 p-0" />
+            </tr>
+          )}
+          {q.isFetchingNextPage && (
+            <tr>
+              <td colSpan={4} className="p-2 text-center text-xs text-slate-400">Loading…</td>
+            </tr>
+          )}
         </tbody>
       </table>
       {kickTarget && (
@@ -142,13 +175,12 @@ function MembersTab({ room }: { room: RoomDetail }) {
 
 function AdminsTab({ room }: { room: RoomDetail }) {
   const q = useQuery({
-    queryKey: ["room", room.id, "members"],
-    queryFn: () => api.get<Member[]>(`/api/rooms/${room.id}/members`),
+    queryKey: ["room", room.id, "staff"],
+    queryFn: () => api.get<Member[]>(`/api/rooms/${room.id}/staff`),
   });
-  const admins = q.data?.filter(m => m.role === "OWNER" || m.role === "ADMIN") ?? [];
   return (
     <div className="text-sm space-y-1">
-      {admins.map((a) => (
+      {(q.data ?? []).map((a) => (
         <div key={a.userId} className="flex items-center justify-between py-1">
           <span className="font-mono">@{a.username}</span>
           <span className="text-xs text-slate-500">{a.role}</span>

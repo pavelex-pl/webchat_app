@@ -6,6 +6,8 @@ import com.webchat.common.NotFoundException;
 import com.webchat.common.UnauthorizedException;
 import java.util.List;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,6 +56,16 @@ public class MembershipService {
     public List<ChatMember> list(Long userId, Long chatId) {
         policy.requireMembership(chatId, userId);
         return members.findByIdChatId(chatId);
+    }
+
+    public Page<ChatMember> listPage(Long userId, Long chatId, Pageable pageable) {
+        policy.requireMembership(chatId, userId);
+        return members.findByChatIdOrdered(chatId, pageable);
+    }
+
+    public List<ChatMember> listStaff(Long userId, Long chatId) {
+        policy.requireMembership(chatId, userId);
+        return members.findStaffByChatId(chatId);
     }
 
     public long memberCount(Long chatId) {

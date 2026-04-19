@@ -2,153 +2,57 @@ databaseChangeLog:
   - changeSet:
       id: 0008-seed-messages
       author: webchat
-      comment: "Seed 10-20 themed messages per seeded room; the most recent in each room is authored by pavlo."
+      comment: "Seed ~5 generic messages per seeded room; 10000 messages in pavlo's default (public-1) chat for scale testing; the most recent message in each room is authored by pavlo."
       changes:
         - sql:
             splitStatements: false
             sql: |
               DO $do$
               DECLARE
-                chat_rec    RECORD;
-                member_ids  BIGINT[];
-                pavlo_id    BIGINT;
-                msg_count   INT;
-                i           INT;
-                author_id   BIGINT;
-                msg_body    TEXT;
-                base_time   TIMESTAMPTZ := now();
+                chat_rec        RECORD;
+                member_ids      BIGINT[];
+                pavlo_id        BIGINT;
+                msg_count       INT;
+                i               INT;
+                author_id       BIGINT;
+                msg_body        TEXT;
+                base_time       TIMESTAMPTZ := now();
+                default_chat_id BIGINT;
+                bodies          TEXT[];
+                pool_len        INT;
+                bulk_count      CONSTANT INT := 10000;
               BEGIN
-                CREATE TEMP TABLE msg_pool (chat_name TEXT NOT NULL, body TEXT NOT NULL)
-                  ON COMMIT DROP;
-
-                INSERT INTO msg_pool (chat_name, body) VALUES
-                  -- general (public)
-                  ('general', 'Hey team, what is the plan for the sprint review?'),
-                  ('general', 'Coffee machine is fixed, finally.'),
-                  ('general', 'VPN will be down tonight at 22:00, plan accordingly.'),
-                  ('general', 'Anybody know where the spare HDMI cables live?'),
-                  ('general', 'Who is on-call this weekend?'),
-                  ('general', 'Friday demo scheduled for 15:00 in the main room.'),
-                  ('general', 'Swag box arrived, come grab some.'),
-                  ('general', 'Reminder: perf reviews due end of week.'),
-                  ('general', 'Great work shipping the redesign, everyone.'),
-                  ('general', 'AC is finally working again, office is bearable.'),
-                  -- random (public)
-                  ('random', 'Saw a double rainbow on the way in this morning.'),
-                  ('random', 'Pineapple on pizza is fine, I said what I said.'),
-                  ('random', 'Need recommendations for a good sci-fi novel.'),
-                  ('random', 'My cat just knocked over my coffee, again.'),
-                  ('random', 'Best pizza spot near the office?'),
-                  ('random', 'Board game night at my place Saturday, DM if interested.'),
-                  ('random', 'Favorite coding music playlist?'),
-                  ('random', 'Trying out sourdough this weekend, wish me luck.'),
-                  ('random', 'Who else is hyped for the new Zelda?'),
-                  ('random', 'Time flies when you are compiling.'),
-                  -- engineering (public)
-                  ('engineering', 'Anyone seeing intermittent 502s from the gateway?'),
-                  ('engineering', 'The new migration shaved 30 ms off p99.'),
-                  ('engineering', 'Rolling out the feature flag at 10 percent.'),
-                  ('engineering', 'Found a nasty N+1 in the orders endpoint.'),
-                  ('engineering', 'Prod deploy succeeded, watching the metrics now.'),
-                  ('engineering', 'The flaky test in billing is failing again.'),
-                  ('engineering', 'Need a second pair of eyes on PR #4821.'),
-                  ('engineering', 'We should add circuit breakers to the downstream calls.'),
-                  ('engineering', 'Cache hit rate is up to 92% after the warmup change.'),
-                  ('engineering', 'Ship it.'),
-                  -- gaming (public)
-                  ('gaming', 'Who is playing the DLC tonight?'),
-                  ('gaming', 'Just one-shot the final boss, lets go.'),
-                  ('gaming', 'My ping is terrible today.'),
-                  ('gaming', 'Looking for a squad, 3 spots open.'),
-                  ('gaming', 'The new map is so good.'),
-                  ('gaming', 'Got my first platinum trophy.'),
-                  ('gaming', 'Who is our healer tonight?'),
-                  ('gaming', 'This boss fight is brutal.'),
-                  ('gaming', 'New patch dropped, check the notes.'),
-                  ('gaming', 'GG everyone, good session.'),
-                  -- memes (public)
-                  ('memes', 'Monday mood.'),
-                  ('memes', 'Me looking at my code from yesterday: who wrote this?'),
-                  ('memes', 'CSS is just spicy HTML.'),
-                  ('memes', 'It works on my machine.'),
-                  ('memes', 'Deploy on Friday, what could go wrong?'),
-                  ('memes', 'My code works, I have no idea why.'),
-                  ('memes', '99 little bugs in the code...'),
-                  ('memes', 'There are two hard things in CS: cache invalidation and naming things.'),
-                  ('memes', 'Git blame led me to me.'),
-                  ('memes', 'Why do programmers prefer dark mode? Light attracts bugs.'),
-                  -- ops (private)
-                  ('ops', 'Prod deploy window opens at 14:00.'),
-                  ('ops', 'Database backup completed in 12 minutes.'),
-                  ('ops', 'Rotating TLS certs this afternoon.'),
-                  ('ops', 'DNS change propagated.'),
-                  ('ops', 'Capacity planning meeting Thursday.'),
-                  ('ops', 'Terraform plan looks clean.'),
-                  ('ops', 'Autoscaler tuning improved cost by 18%.'),
-                  ('ops', 'Firewall rules reviewed and tightened.'),
-                  ('ops', 'K8s control plane upgraded successfully.'),
-                  ('ops', 'Post-mortem draft is ready for review.'),
-                  -- core-team (private)
-                  ('core-team', 'Roadmap draft for Q3 is up.'),
-                  ('core-team', 'OKRs review on Friday.'),
-                  ('core-team', 'Budget projection for next quarter shared in drive.'),
-                  ('core-team', 'Hiring plan is approved.'),
-                  ('core-team', 'Board slides draft is ready.'),
-                  ('core-team', 'Need feedback on the pricing proposal.'),
-                  ('core-team', 'Product launch date moved up by two weeks.'),
-                  ('core-team', 'Sales pipeline is looking strong.'),
-                  ('core-team', 'Investor update goes out Monday.'),
-                  ('core-team', 'Team offsite feedback was overwhelmingly positive.'),
-                  -- design (private)
-                  ('design', 'New component library is up for review.'),
-                  ('design', 'Dark mode palette finalized.'),
-                  ('design', 'User research findings are in Figma.'),
-                  ('design', 'Accessibility audit turned up 14 issues.'),
-                  ('design', 'Motion prototype is ready to share.'),
-                  ('design', 'Design review tomorrow at 10:00.'),
-                  ('design', 'Updated the navigation IA proposal.'),
-                  ('design', 'User testing scheduled for next Tuesday.'),
-                  ('design', 'Spacing system simplified to 4/8.'),
-                  ('design', 'Style guide site is live.'),
-                  -- leadership (private)
-                  ('leadership', 'Quarterly planning kicks off Monday.'),
-                  ('leadership', 'Promotion cycle closes this Friday.'),
-                  ('leadership', 'Culture survey results are in.'),
-                  ('leadership', 'Leadership offsite itinerary is up.'),
-                  ('leadership', 'Budget freeze is lifting in two weeks.'),
-                  ('leadership', 'Need a decision on the RTO policy.'),
-                  ('leadership', 'New engineering director starts in May.'),
-                  ('leadership', 'Performance calibration session Thursday.'),
-                  ('leadership', 'CEO update for the board is drafted.'),
-                  ('leadership', 'Skip-levels for this quarter scheduled.'),
-                  -- sre (private)
-                  ('sre', 'p99 latency spiked at 11:02.'),
-                  ('sre', 'Error budget consumed 40% this week.'),
-                  ('sre', 'Added a new Prometheus alert.'),
-                  ('sre', 'Investigating gray failures in region us-west.'),
-                  ('sre', 'Chaos testing scheduled for Saturday night.'),
-                  ('sre', 'PagerDuty rotation updated.'),
-                  ('sre', 'Disaster recovery drill next Wednesday.'),
-                  ('sre', 'Identified a retry storm, adding jitter.'),
-                  ('sre', 'Canary rollout looking stable.'),
-                  ('sre', 'Latency SLO missed, drafting post-mortem.');
+                CREATE TEMP TABLE msg_pool (body TEXT NOT NULL) ON COMMIT DROP;
+                INSERT INTO msg_pool (body) VALUES
+                  ('Welcome to the room!'),
+                  ('Hey team, what is the plan for today?'),
+                  ('Anyone have an update on the project?'),
+                  ('Heads up: maintenance window tonight at 22:00.'),
+                  ('Quick question about the new rollout.'),
+                  ('Ship it.'),
+                  ('Reviewing the latest changes now.'),
+                  ('Metrics look healthy since the deploy.'),
+                  ('Good work everyone, have a great weekend.'),
+                  ('Reminder: standup moved to 10:00.');
 
                 SELECT id INTO pavlo_id FROM users WHERE username = 'pavlo';
 
+                SELECT id INTO default_chat_id
+                  FROM chats
+                 WHERE owner_id = pavlo_id AND name = 'public-1';
+
                 FOR chat_rec IN
-                  SELECT id, name FROM chats WHERE description LIKE 'Seed room: %'
+                  SELECT id FROM chats
+                   WHERE owner_id = pavlo_id
+                     AND id <> default_chat_id
                 LOOP
                   SELECT array_agg(user_id) INTO member_ids
                     FROM chat_members WHERE chat_id = chat_rec.id;
 
-                  msg_count := 10 + floor(random() * 11)::int;   -- 10..20 inclusive
+                  msg_count := 3 + floor(random() * 3)::int;   -- 3..5 messages per room
 
                   FOR i IN 1..msg_count LOOP
-                    SELECT body INTO msg_body
-                      FROM msg_pool
-                     WHERE chat_name = chat_rec.name
-                     ORDER BY random()
-                     LIMIT 1;
+                    SELECT body INTO msg_body FROM msg_pool ORDER BY random() LIMIT 1;
 
                     IF i = msg_count THEN
                       author_id := pavlo_id;
@@ -161,4 +65,22 @@ databaseChangeLog:
                                  base_time - ((msg_count - i) * interval '30 seconds'));
                   END LOOP;
                 END LOOP;
+
+                -- Dense backlog for pavlo's default chat: 10000 messages,
+                -- last one authored by pavlo, earlier ones by random members.
+                bodies   := ARRAY(SELECT body FROM msg_pool);
+                pool_len := array_length(bodies, 1);
+
+                SELECT array_agg(user_id) INTO member_ids
+                  FROM chat_members WHERE chat_id = default_chat_id;
+
+                INSERT INTO messages (chat_id, author_id, body, created_at)
+                SELECT default_chat_id,
+                       CASE WHEN s.i = bulk_count
+                            THEN pavlo_id
+                            ELSE member_ids[1 + floor(random() * array_length(member_ids, 1))::int]
+                       END,
+                       bodies[1 + floor(random() * pool_len)::int],
+                       base_time - ((bulk_count - s.i) * interval '30 seconds')
+                  FROM generate_series(1, bulk_count) AS s(i);
               END $do$;

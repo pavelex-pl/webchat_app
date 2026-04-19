@@ -1,6 +1,5 @@
 package com.webchat.chat;
 
-import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -25,19 +24,21 @@ public interface ChatRepository extends JpaRepository<Chat, Long> {
 
     @Query("""
            SELECT c FROM Chat c
-           WHERE c.type <> com.webchat.chat.ChatType.DIRECT
+           WHERE c.type = :type
              AND c.id IN (SELECT m.id.chatId FROM ChatMember m WHERE m.id.userId = :userId)
-           ORDER BY c.name ASC
+           ORDER BY c.name ASC, c.id ASC
            """)
-    List<Chat> findRoomsForUser(@Param("userId") Long userId);
+    Page<Chat> findRoomsForUserByType(@Param("userId") Long userId,
+                                      @Param("type") ChatType type,
+                                      Pageable pageable);
 
     @Query("""
            SELECT c FROM Chat c
            WHERE c.type = com.webchat.chat.ChatType.DIRECT
              AND c.id IN (SELECT m.id.chatId FROM ChatMember m WHERE m.id.userId = :userId)
-           ORDER BY c.createdAt DESC
+           ORDER BY c.createdAt DESC, c.id DESC
            """)
-    List<Chat> findDirectChatsForUser(@Param("userId") Long userId);
+    Page<Chat> findDirectChatsForUserPaged(@Param("userId") Long userId, Pageable pageable);
 
     @Query("""
            SELECT c FROM Chat c

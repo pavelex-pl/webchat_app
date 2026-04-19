@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -59,15 +60,20 @@ public class RoomsController {
     @GetMapping("/public")
     public PageResponse<RoomResponse> publicCatalog(@RequestParam(required = false) String q,
                                                     @RequestParam(defaultValue = "0") int page,
-                                                    @RequestParam(defaultValue = "20") int size) {
+                                                    @RequestParam(defaultValue = "50") int size) {
         Long uid = currentUser.require().userId();
         var p = rooms.publicCatalog(q, page, size);
         List<Long> pageChatIds = p.getContent().stream().map(Chat::getId).toList();
         Set<Long> bannedHere = pageChatIds.isEmpty()
                 ? Set.of()
                 : new HashSet<>(bans.findBannedChatIds(uid, pageChatIds));
+        Set<Long> joinedHere = pageChatIds.isEmpty()
+                ? Set.of()
+                : new HashSet<>(members.findMemberChatIds(uid, pageChatIds));
         return PageResponse.of(p, c -> RoomResponse.from(
-                c, memberships.memberCount(c.getId()), bannedHere.contains(c.getId())));
+                c, memberships.memberCount(c.getId()),
+                bannedHere.contains(c.getId()),
+                joinedHere.contains(c.getId())));
     }
 
     @PostMapping
@@ -125,10 +131,23 @@ public class RoomsController {
     // ---- members & admins ----
 
     @GetMapping("/{id}/members")
-    public List<MemberResponse> listMembers(@PathVariable Long id) {
+    public PageResponse<MemberResponse> listMembers(@PathVariable Long id,
+                                                    @RequestParam(defaultValue = "0") int page,
+                                                    @RequestParam(defaultValue = "50") int size) {
         Long uid = currentUser.require().userId();
-        List<ChatMember> list = memberships.list(uid, id);
-        Map<Long, String> names = lookup.usernames(list.stream().map(ChatMember::getUserId).collect(Collectors.toSet()));
+        var p = memberships.listPage(uid, id, PageRequest.of(page, size));
+        Map<Long, String> names = lookup.usernames(
+                p.getContent().stream().map(ChatMember::getUserId).collect(Collectors.toSet()));
+        return PageResponse.of(p, m -> new MemberResponse(
+                m.getUserId(), names.get(m.getUserId()), m.getRole(), m.getJoinedAt()));
+    }
+
+    @GetMapping("/{id}/staff")
+    public List<MemberResponse> listStaff(@PathVariable Long id) {
+        Long uid = currentUser.require().userId();
+        List<ChatMember> list = memberships.listStaff(uid, id);
+        Map<Long, String> names = lookup.usernames(
+                list.stream().map(ChatMember::getUserId).collect(Collectors.toSet()));
         return list.stream()
                 .map(m -> new MemberResponse(m.getUserId(), names.get(m.getUserId()), m.getRole(), m.getJoinedAt()))
                 .toList();

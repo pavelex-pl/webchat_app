@@ -135,6 +135,12 @@ public class MessageService {
         }
     }
 
+    @Transactional
+    public void markAllRead(Long userId, Long chatId) {
+        policy.requireMembership(chatId, userId);
+        messages.findMaxIdByChatId(chatId).ifPresent(maxId -> markRead(userId, chatId, maxId));
+    }
+
     private static void validateBody(String body) {
         if (body == null || body.isBlank()) throw new BadRequestException("Message body required");
         if (body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_BYTES) {

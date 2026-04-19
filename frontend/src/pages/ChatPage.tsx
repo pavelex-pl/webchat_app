@@ -28,6 +28,14 @@ export default function ChatPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["chats"] }); nav("/"); },
   });
 
+  const markAllRead = useMutation({
+    mutationFn: () => api.post(`/api/chats/${chatId}/read-all`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["chats"] });
+      qc.invalidateQueries({ queryKey: ["chat", chatId] });
+    },
+  });
+
   if (q.isLoading) return <div className="p-6 text-sm text-slate-500">Loading...</div>;
   if (q.isError) return <div className="p-6 text-sm text-red-600">{(q.error as ApiError).detail}</div>;
   if (!q.data) return null;
@@ -63,6 +71,12 @@ export default function ChatPage() {
             </div>
           </div>
           <div className="flex items-center gap-3 text-sm">
+            <button
+              onClick={() => markAllRead.mutate()}
+              disabled={markAllRead.isPending}
+              className="text-slate-700 hover:underline disabled:text-slate-400">
+              Mark all read
+            </button>
             {!isDirect && chat.yourRole && chat.yourRole !== "OWNER" && (
               <button onClick={() => setConfirmLeave(true)} className="text-red-600 hover:underline">Leave</button>
             )}

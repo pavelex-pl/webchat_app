@@ -2,6 +2,7 @@ package com.webchat.message;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -10,6 +11,9 @@ import org.springframework.data.repository.query.Param;
 public interface MessageRepository extends JpaRepository<Message, Long> {
     List<Message> findByChatIdAndIdLessThanOrderByIdDesc(Long chatId, Long before, Limit limit);
     List<Message> findByChatIdOrderByIdDesc(Long chatId, Limit limit);
+
+    @Query("SELECT MAX(m.id) FROM Message m WHERE m.chatId = :chatId")
+    Optional<Long> findMaxIdByChatId(@Param("chatId") Long chatId);
 
     /**
      * Per-chat unread count for a user: messages not authored by them,

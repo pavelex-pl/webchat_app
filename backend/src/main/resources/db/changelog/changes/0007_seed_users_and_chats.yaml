@@ -9,68 +9,70 @@ databaseChangeLog:
   - changeSet:
       id: 0007-seed-users
       author: webchat
-      comment: "Seed user pavlo + test1..test100 with password user123QWERTY!"
-      changes:
-        - sql:
-            splitStatements: false
-            sql: |
-              INSERT INTO users (email, username, password_hash)
-              VALUES ('pavlo@webchat.local', 'pavlo',
-                      crypt('user123QWERTY!', gen_salt('bf', 12)));
-
-              INSERT INTO users (email, username, password_hash)
-              SELECT 'test' || i || '@webchat.local',
-                     'test' || i,
-                     crypt('user123QWERTY!', gen_salt('bf', 12))
-              FROM generate_series(1, 100) AS i;
-
-  - changeSet:
-      id: 0007-seed-chats
-      author: webchat
-      comment: "Seed 5 public + 5 private rooms; pavlo is owner, 14 random test users as members"
+      comment: "Seed pavlo + test1..test10000; password is user123QWERTY! for every user."
       changes:
         - sql:
             splitStatements: false
             sql: |
               DO $do$
               DECLARE
-                pavlo_id     BIGINT;
-                new_chat_id  BIGINT;
-                room_name    TEXT;
-                public_names TEXT[] := ARRAY['general','random','engineering','gaming','memes'];
-                private_names TEXT[] := ARRAY['ops','core-team','design','leadership','sre'];
+                shared_hash TEXT;
+              BEGIN
+                -- Compute bcrypt once and reuse for every test user.
+                -- At cost 12, 10k individual hashes would take ~40 minutes.
+                shared_hash := crypt('user123QWERTY!', gen_salt('bf', 12));
+
+                INSERT INTO users (email, username, password_hash)
+                VALUES ('pavlo@webchat.local', 'pavlo',
+                        crypt('user123QWERTY!', gen_salt('bf', 12)));
+
+                INSERT INTO users (email, username, password_hash)
+                SELECT 'test' || i || '@webchat.local',
+                       'test' || i,
+                       shared_hash
+                FROM generate_series(1, 10000) AS i;
+              END $do$;
+
+  - changeSet:
+      id: 0007-seed-chats
+      author: webchat
+      comment: "Seed 1000 public + 1000 private rooms; pavlo is owner; 999 additional random members per room (1000 total)."
+      changes:
+        - sql:
+            splitStatements: false
+            sql: |
+              DO $do$
+              DECLARE
+                pavlo_id  BIGINT;
+                chat_rec  RECORD;
               BEGIN
                 SELECT id INTO pavlo_id FROM users WHERE username = 'pavlo';
 
-                FOREACH room_name IN ARRAY public_names LOOP
-                  INSERT INTO chats (type, name, description, owner_id)
-                       VALUES ('PUBLIC_ROOM', room_name,
-                               'Seed room: ' || room_name, pavlo_id)
-                    RETURNING id INTO new_chat_id;
+                INSERT INTO chats (type, name, description, owner_id)
+                SELECT 'PUBLIC_ROOM',
+                       'public-' || i,
+                       'Seed public room #' || i,
+                       pavlo_id
+                FROM generate_series(1, 1000) AS i;
 
+                INSERT INTO chats (type, name, description, owner_id)
+                SELECT 'PRIVATE_ROOM',
+                       'private-' || i,
+                       'Seed private room #' || i,
+                       pavlo_id
+                FROM generate_series(1, 1000) AS i;
+
+                -- Pavlo is OWNER of every seeded room
+                INSERT INTO chat_members (chat_id, user_id, role)
+                SELECT id, pavlo_id, 'OWNER' FROM chats WHERE owner_id = pavlo_id;
+
+                -- 999 additional random MEMBER rows per room → 1000 total members per room
+                FOR chat_rec IN SELECT id FROM chats WHERE owner_id = pavlo_id LOOP
                   INSERT INTO chat_members (chat_id, user_id, role)
-                       VALUES (new_chat_id, pavlo_id, 'OWNER');
-
-                  INSERT INTO chat_members (chat_id, user_id, role)
-                  SELECT new_chat_id, u.id, 'MEMBER'
-                    FROM (SELECT id FROM users
-                           WHERE username LIKE 'test%'
-                        ORDER BY random() LIMIT 14) u;
-                END LOOP;
-
-                FOREACH room_name IN ARRAY private_names LOOP
-                  INSERT INTO chats (type, name, description, owner_id)
-                       VALUES ('PRIVATE_ROOM', room_name,
-                               'Seed room: ' || room_name, pavlo_id)
-                    RETURNING id INTO new_chat_id;
-
-                  INSERT INTO chat_members (chat_id, user_id, role)
-                       VALUES (new_chat_id, pavlo_id, 'OWNER');
-
-                  INSERT INTO chat_members (chat_id, user_id, role)
-                  SELECT new_chat_id, u.id, 'MEMBER'
-                    FROM (SELECT id FROM users
-                           WHERE username LIKE 'test%'
-                        ORDER BY random() LIMIT 14) u;
+                  SELECT chat_rec.id, u.id, 'MEMBER'
+                  FROM users u
+                  WHERE u.id <> pavlo_id
+                  ORDER BY random()
+                  LIMIT 999;
                 END LOOP;
               END $do$;

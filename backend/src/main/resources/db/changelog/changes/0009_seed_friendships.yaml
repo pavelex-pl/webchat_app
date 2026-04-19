@@ -1,0 +1,27 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0009-seed-friendships
+      author: webchat
+      comment: "Give every user ~50 accepted friends on average. Each user picks 25 random peers — and is picked by ~25 others — so the per-user friend degree averages out to ~50."
+      changes:
+        - sql:
+            splitStatements: false
+            sql: |
+              -- Friendships are stored canonically (user_a_id < user_b_id), so
+              -- A→B and B→A collapse to a single row. With 25 picks per user,
+              -- average degree (friends per user) works out to ~50.
+              INSERT INTO friendships (user_a_id, user_b_id, status, initiated_by, accepted_at)
+              SELECT LEAST(u1.id, u2.id),
+                     GREATEST(u1.id, u2.id),
+                     'ACCEPTED',
+                     u1.id,
+                     now()
+              FROM users u1
+              CROSS JOIN LATERAL (
+                SELECT id
+                  FROM users
+                 WHERE id <> u1.id
+                 ORDER BY random()
+                 LIMIT 25
+              ) u2
+              ON CONFLICT DO NOTHING;

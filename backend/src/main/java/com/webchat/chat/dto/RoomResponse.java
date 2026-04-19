@@ -10,15 +10,17 @@ public record RoomResponse(
         String description,
         Long ownerId,
         long memberCount,
-        boolean bannedFromRoom
+        boolean bannedFromRoom,
+        boolean youAreMember
 ) {
     public static RoomResponse from(Chat c, long memberCount) {
         return new RoomResponse(c.getId(), c.getType(), c.getName(), c.getDescription(),
-                c.getOwnerId(), memberCount, false);
+                c.getOwnerId(), memberCount, false, false);
     }
 
-    public static RoomResponse from(Chat c, long memberCount, boolean bannedFromRoom) {
+    public static RoomResponse from(Chat c, long memberCount, boolean bannedFromRoom,
+                                    boolean youAreMember) {
         return new RoomResponse(c.getId(), c.getType(), c.getName(), c.getDescription(),
-                c.getOwnerId(), memberCount, bannedFromRoom);
+                c.getOwnerId(), memberCount, bannedFromRoom, youAreMember);
     }
 }

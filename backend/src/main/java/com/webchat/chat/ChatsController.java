@@ -5,6 +5,8 @@ import com.webchat.auth.UserLookup;
 import com.webchat.chat.dto.ChatDetailResponse;
 import com.webchat.chat.dto.ChatSummaryResponse;
 import com.webchat.chat.dto.OpenDirectRequest;
+import com.webchat.chat.dto.PageResponse;
+import com.webchat.common.BadRequestException;
 import com.webchat.common.NotFoundException;
 import com.webchat.friends.FriendService;
 import com.webchat.message.MessageRepository;
@@ -17,6 +19,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,6 +28,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -57,45 +62,60 @@ public class ChatsController {
     }
 
     @GetMapping
-    public List<ChatSummaryResponse> myChats() {
+    public PageResponse<ChatSummaryResponse> myChats(
+            @RequestParam("type") String typeRaw,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
         Long uid = currentUser.require().userId();
-        List<Chat> rooms = chats.findRoomsForUser(uid);
-        List<Chat> directList = chats.findDirectChatsForUser(uid);
+        ChatType type;
+        try {
+            type = ChatType.valueOf(typeRaw);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestException("Unknown chat type: " + typeRaw);
+        }
 
-        Set<Long> allChatIds = new java.util.HashSet<>();
-        rooms.forEach(c -> allChatIds.add(c.getId()));
-        directList.forEach(c -> allChatIds.add(c.getId()));
+        Page<Chat> p = (type == ChatType.DIRECT)
+                ? chats.findDirectChatsForUserPaged(uid, PageRequest.of(page, size))
+                : chats.findRoomsForUserByType(uid, type, PageRequest.of(page, size));
+
+        List<Chat> pageItems = p.getContent();
+        Set<Long> pageChatIds = pageItems.stream().map(Chat::getId).collect(Collectors.toSet());
 
         Map<Long, Long> unreadByChat = new HashMap<>();
-        if (!allChatIds.isEmpty()) {
-            for (var u : messages.countUnread(uid, allChatIds)) {
+        if (!pageChatIds.isEmpty()) {
+            for (var u : messages.countUnread(uid, pageChatIds)) {
                 unreadByChat.put(u.getChatId(), u.getUnread());
             }
         }
 
         Map<Long, Long> peerIdByChat = new HashMap<>();
-        for (Chat c : directList) {
-            peerIdByChat.put(c.getId(), directs.peerId(c.getId(), uid));
+        if (type == ChatType.DIRECT) {
+            for (Chat c : pageItems) {
+                peerIdByChat.put(c.getId(), directs.peerId(c.getId(), uid));
+            }
         }
-        Map<Long, String> peerUsernames = lookup.usernames(peerIdByChat.values().stream()
-                .filter(java.util.Objects::nonNull).collect(Collectors.toSet()));
+        Map<Long, String> peerUsernames = peerIdByChat.isEmpty()
+                ? Map.of()
+                : lookup.usernames(peerIdByChat.values().stream()
+                        .filter(java.util.Objects::nonNull).collect(Collectors.toSet()));
 
         List<ChatSummaryResponse> out = new ArrayList<>();
-        for (Chat c : rooms) {
-            out.add(new ChatSummaryResponse(
-                    c.getId(), c.getType(), c.getName(), c.getDescription(),
-                    c.getOwnerId(), memberships.memberCount(c.getId()), null, null,
-                    unreadByChat.getOrDefault(c.getId(), 0L)));
+        for (Chat c : pageItems) {
+            if (type == ChatType.DIRECT) {
+                Long peerId = peerIdByChat.get(c.getId());
+                out.add(new ChatSummaryResponse(
+                        c.getId(), c.getType(), null, null, null,
+                        memberships.memberCount(c.getId()),
+                        peerId, peerId == null ? null : peerUsernames.get(peerId),
+                        unreadByChat.getOrDefault(c.getId(), 0L)));
+            } else {
+                out.add(new ChatSummaryResponse(
+                        c.getId(), c.getType(), c.getName(), c.getDescription(),
+                        c.getOwnerId(), memberships.memberCount(c.getId()), null, null,
+                        unreadByChat.getOrDefault(c.getId(), 0L)));
+            }
         }
-        for (Chat c : directList) {
-            Long peerId = peerIdByChat.get(c.getId());
-            out.add(new ChatSummaryResponse(
-                    c.getId(), c.getType(), null, null, null,
-                    memberships.memberCount(c.getId()),
-                    peerId, peerId == null ? null : peerUsernames.get(peerId),
-                    unreadByChat.getOrDefault(c.getId(), 0L)));
-        }
-        return out;
+        return new PageResponse<>(out, p.getNumber(), p.getSize(), p.getTotalElements());
     }
 
     @GetMapping("/{id}")

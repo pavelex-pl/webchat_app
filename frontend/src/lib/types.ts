@@ -10,6 +10,7 @@ export type Room = {
   ownerId: number | null;
   memberCount: number;
   bannedFromRoom: boolean;
+  youAreMember: boolean;
 };
 
 export type ChatSummary = {

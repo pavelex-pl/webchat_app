@@ -1,13 +1,16 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { ApiError, api } from "../lib/api";
-import type { Friendship, Member, RoomDetail } from "../lib/types";
+import type { Friendship, Member, Page, RoomDetail } from "../lib/types";
 import { useAuthStore } from "../stores/authStore";
+import { useInfiniteScrollSentinel } from "../lib/useInfiniteScrollSentinel";
 import { ws } from "../lib/ws";
 import ConfirmDialog from "./ConfirmDialog";
 import InviteUserModal from "./InviteUserModal";
 import ManageRoomModal from "./ManageRoomModal";
 import PresenceDot from "./PresenceDot";
+
+const MEMBERS_PAGE = 50;
 
 type FriendshipState = "self" | "friend" | "outgoing" | "incoming" | "none";
 
@@ -19,10 +22,26 @@ export default function MembersPanel({ room }: { room: RoomDetail }) {
   const canManage = room.yourRole === "OWNER" || room.yourRole === "ADMIN";
   const canInvite = room.type === "PRIVATE_ROOM" && room.yourRole !== null;
 
-  const membersQ = useQuery({
+  const membersQ = useInfiniteQuery({
     queryKey: ["room", room.id, "members"],
-    queryFn: () => api.get<Member[]>(`/api/rooms/${room.id}/members`),
+    queryFn: ({ pageParam = 0 }) =>
+      api.get<Page<Member>>(
+        `/api/rooms/${room.id}/members?page=${pageParam}&size=${MEMBERS_PAGE}`,
+      ),
+    initialPageParam: 0,
+    getNextPageParam: (last) =>
+      (last.page + 1) * last.size < last.total ? last.page + 1 : undefined,
   });
+  const members = useMemo(
+    () => (membersQ.data?.pages ?? []).flatMap((p) => p.items),
+    [membersQ.data],
+  );
+  const membersTotal = membersQ.data?.pages[0]?.total ?? 0;
+  const membersSentinelRef = useInfiniteScrollSentinel<HTMLDivElement>(
+    membersQ.hasNextPage,
+    membersQ.isFetchingNextPage,
+    membersQ.fetchNextPage,
+  );
   // Live membership updates: refresh the list when anyone joins/leaves/gets
   // banned, so observers don't have to reload the page.
   useEffect(() => {
@@ -92,11 +111,11 @@ export default function MembersPanel({ room }: { room: RoomDetail }) {
       <div className="text-xs text-slate-500">Owner: <span className="font-mono">{room.ownerUsername ?? "—"}</span></div>
 
       <h3 className="text-sm font-semibold text-slate-700 mt-4 mb-1">
-        Members <span className="text-slate-400 font-normal">({membersQ.data?.length ?? 0})</span>
+        Members <span className="text-slate-400 font-normal">({membersTotal})</span>
       </h3>
       {actionError && <div className="text-xs text-red-600 mb-2">{actionError}</div>}
       <ul className="space-y-1">
-        {membersQ.data?.map((m) => {
+        {members.map((m) => {
           const st = stateFor(m.userId);
           return (
             <li key={m.userId} className="text-sm flex items-center gap-2">
@@ -144,6 +163,10 @@ export default function MembersPanel({ room }: { room: RoomDetail }) {
           );
         })}
       </ul>
+      {membersQ.hasNextPage && <div ref={membersSentinelRef} className="h-1" />}
+      {membersQ.isFetchingNextPage && (
+        <div className="text-xs text-slate-400 py-1">Loading…</div>
+      )}
       {canInvite && (
         <button
           onClick={() => setInviting(true)}
