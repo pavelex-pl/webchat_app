@@ -3,3 +3,6 @@ dist
 .vite
 .npm-cache
 *.log
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
