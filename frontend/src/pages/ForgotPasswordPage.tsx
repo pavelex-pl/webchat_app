@@ -28,9 +28,14 @@ export default function ForgotPasswordPage() {
       <form onSubmit={submit} className="bg-white rounded-lg shadow p-6 w-full max-w-sm space-y-4">
         <h1 className="text-2xl font-semibold text-slate-800">Forgot password</h1>
         {done ? (
-          <p className="text-sm text-slate-600">
-            If that email is registered, a reset link has been issued. (In dev, check backend console for the token.)
-          </p>
+          <div className="space-y-2 text-sm text-slate-600">
+            <p>
+              Reset link issued. This build does not send emails — check the backend logs for the reset URL.
+            </p>
+            <p className="text-xs text-slate-500 font-mono">
+              docker compose logs backend | grep "PASSWORD RESET LINK"
+            </p>
+          </div>
         ) : (
           <>
             <FormError error={error} />

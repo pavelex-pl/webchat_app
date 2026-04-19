@@ -71,7 +71,7 @@ public class RoomService {
 
     public Page<Chat> publicCatalog(String q, int page, int size) {
         if (size > 100) size = 100;
-        return chats.searchPublic(q == null || q.isBlank() ? null : q.trim(), PageRequest.of(page, size));
+        return chats.searchPublic(q == null ? "" : q.trim(), PageRequest.of(page, size));
     }
 
     private static void validateName(String name) {

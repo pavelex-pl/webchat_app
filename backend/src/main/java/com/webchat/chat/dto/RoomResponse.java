@@ -9,9 +9,16 @@ public record RoomResponse(
         String name,
         String description,
         Long ownerId,
-        long memberCount
+        long memberCount,
+        boolean bannedFromRoom
 ) {
     public static RoomResponse from(Chat c, long memberCount) {
-        return new RoomResponse(c.getId(), c.getType(), c.getName(), c.getDescription(), c.getOwnerId(), memberCount);
+        return new RoomResponse(c.getId(), c.getType(), c.getName(), c.getDescription(),
+                c.getOwnerId(), memberCount, false);
+    }
+
+    public static RoomResponse from(Chat c, long memberCount, boolean bannedFromRoom) {
+        return new RoomResponse(c.getId(), c.getType(), c.getName(), c.getDescription(),
+                c.getOwnerId(), memberCount, bannedFromRoom);
     }
 }

@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError, api } from "../lib/api";
-import type { Page, Room } from "../lib/types";
+import type { ChatSummary, Page, Room } from "../lib/types";
 
 export default function PublicRoomsPage() {
   const [q, setQ] = useState("");
@@ -14,6 +14,15 @@ export default function PublicRoomsPage() {
     queryKey: ["publicRooms", q, page],
     queryFn: () => api.get<Page<Room>>(`/api/rooms/public?page=${page}&size=20&q=${encodeURIComponent(q)}`),
   });
+
+  const chats = useQuery({
+    queryKey: ["chats"],
+    queryFn: () => api.get<ChatSummary[]>("/api/chats"),
+  });
+  const myRoomIds = useMemo(
+    () => new Set((chats.data ?? []).map((c) => c.id)),
+    [chats.data]
+  );
 
   const join = useMutation({
     mutationFn: (id: number) => api.post(`/api/rooms/${id}/join`),
@@ -35,21 +44,42 @@ export default function PublicRoomsPage() {
       {catalog.isLoading && <p className="text-sm text-slate-500">Loading...</p>}
       {catalog.isError && <p className="text-sm text-red-600">Failed to load</p>}
       <ul className="bg-white rounded shadow divide-y">
-        {catalog.data?.items.map((r) => (
-          <li key={r.id} className="p-4 flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <div className="font-medium text-slate-800">#{r.name}</div>
-              <div className="text-sm text-slate-500 truncate">{r.description ?? "—"}</div>
-              <div className="text-xs text-slate-400 mt-1">{r.memberCount} member{r.memberCount === 1 ? "" : "s"}</div>
-            </div>
-            <button
-              disabled={join.isPending}
-              onClick={() => join.mutate(r.id)}
-              className="px-3 py-1.5 bg-slate-800 text-white rounded text-sm">
-              Join
-            </button>
-          </li>
-        ))}
+        {catalog.data?.items.map((r) => {
+          const isMember = myRoomIds.has(r.id);
+          return (
+            <li key={r.id} className="p-4 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="font-medium text-slate-800">#{r.name}</div>
+                <div className="text-sm text-slate-500 truncate">{r.description ?? "—"}</div>
+                <div className="text-xs text-slate-400 mt-1">{r.memberCount} member{r.memberCount === 1 ? "" : "s"}</div>
+                {r.bannedFromRoom && (
+                  <div className="text-xs text-red-600 mt-1">You are banned from this room</div>
+                )}
+              </div>
+              {isMember ? (
+                <button
+                  onClick={() => nav(`/chat/${r.id}`)}
+                  className="px-3 py-1.5 border border-slate-300 text-slate-700 rounded text-sm">
+                  Open
+                </button>
+              ) : r.bannedFromRoom ? (
+                <button
+                  disabled
+                  title="You are banned from this room"
+                  className="px-3 py-1.5 bg-slate-300 text-slate-500 rounded text-sm cursor-not-allowed">
+                  Join
+                </button>
+              ) : (
+                <button
+                  disabled={join.isPending}
+                  onClick={() => join.mutate(r.id)}
+                  className="px-3 py-1.5 bg-slate-800 text-white rounded text-sm">
+                  Join
+                </button>
+              )}
+            </li>
+          );
+        })}
         {catalog.data && catalog.data.items.length === 0 && (
           <li className="p-6 text-center text-sm text-slate-500">No rooms match.</li>
         )}

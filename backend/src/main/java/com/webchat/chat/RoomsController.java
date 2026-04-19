@@ -13,6 +13,7 @@ import com.webchat.chat.dto.RoomResponse;
 import com.webchat.chat.dto.UpdateRoomRequest;
 import jakarta.validation.Valid;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -37,15 +38,18 @@ public class RoomsController {
     private final MembershipService memberships;
     private final InvitationService invitations;
     private final ChatMemberRepository members;
+    private final ChatBanRepository bans;
     private final UserLookup lookup;
     private final CurrentUserResolver currentUser;
 
     public RoomsController(RoomService rooms, MembershipService memberships, InvitationService invitations,
-                           ChatMemberRepository members, UserLookup lookup, CurrentUserResolver currentUser) {
+                           ChatMemberRepository members, ChatBanRepository bans, UserLookup lookup,
+                           CurrentUserResolver currentUser) {
         this.rooms = rooms;
         this.memberships = memberships;
         this.invitations = invitations;
         this.members = members;
+        this.bans = bans;
         this.lookup = lookup;
         this.currentUser = currentUser;
     }
@@ -56,8 +60,14 @@ public class RoomsController {
     public PageResponse<RoomResponse> publicCatalog(@RequestParam(required = false) String q,
                                                     @RequestParam(defaultValue = "0") int page,
                                                     @RequestParam(defaultValue = "20") int size) {
+        Long uid = currentUser.require().userId();
         var p = rooms.publicCatalog(q, page, size);
-        return PageResponse.of(p, c -> RoomResponse.from(c, memberships.memberCount(c.getId())));
+        List<Long> pageChatIds = p.getContent().stream().map(Chat::getId).toList();
+        Set<Long> bannedHere = pageChatIds.isEmpty()
+                ? Set.of()
+                : new HashSet<>(bans.findBannedChatIds(uid, pageChatIds));
+        return PageResponse.of(p, c -> RoomResponse.from(
+                c, memberships.memberCount(c.getId()), bannedHere.contains(c.getId())));
     }
 
     @PostMapping

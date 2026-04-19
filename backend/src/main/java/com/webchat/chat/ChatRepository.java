@@ -17,8 +17,8 @@ public interface ChatRepository extends JpaRepository<Chat, Long> {
     @Query("""
            SELECT c FROM Chat c
            WHERE c.type = com.webchat.chat.ChatType.PUBLIC_ROOM
-             AND (:q IS NULL OR LOWER(c.name) LIKE LOWER(CONCAT('%', :q, '%'))
-                              OR LOWER(COALESCE(c.description,'')) LIKE LOWER(CONCAT('%', :q, '%')))
+             AND (LOWER(c.name) LIKE LOWER(CONCAT('%', :q, '%'))
+                  OR LOWER(COALESCE(c.description,'')) LIKE LOWER(CONCAT('%', :q, '%')))
            ORDER BY c.name ASC
            """)
     Page<Chat> searchPublic(@Param("q") String q, Pageable pageable);
