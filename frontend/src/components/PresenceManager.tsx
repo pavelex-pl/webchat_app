@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { api } from "../lib/api";
 import { tabId } from "../lib/tabId";
 import { ws } from "../lib/ws";
 import { useAuthStore } from "../stores/authStore";
@@ -81,17 +82,41 @@ export default function PresenceManager() {
     return () => { window.clearInterval(handle); unsubConnect(); };
   }, []);
 
+  // WS carries delta updates; initial state is fetched via REST so a tab
+  // refresh can't race the STOMP SUBSCRIBE and lose the first broadcast.
+  const seedStatuses = async (userIds: number[]) => {
+    if (userIds.length === 0) return;
+    try {
+      const updates = await api.get<Update[]>(`/api/presence?userIds=${userIds.join(",")}`);
+      updates.forEach((u) => setStatus(u.userId, u.status));
+    } catch {
+      // ignore — delta updates will repair eventually
+    }
+  };
+
   useEffect(() => {
     const flush = () => {
       const { adds, removes } = usePresenceStore.getState().flushPending();
-      if (adds.length > 0) ws.publish("/app/watch", { userIds: adds });
+      if (adds.length > 0) {
+        ws.publish("/app/watch", { userIds: adds });
+        seedStatuses(adds);
+      }
       if (removes.length > 0) ws.publish("/app/unwatch", { userIds: removes });
+    };
+    // On (re)connect, re-send watches for everything we're currently watching
+    // and reseed statuses — the server drops our subscriptions on disconnect.
+    const reconcile = () => {
+      const watched = Object.keys(usePresenceStore.getState().watchCount).map(Number);
+      if (watched.length > 0) {
+        ws.publish("/app/watch", { userIds: watched });
+        seedStatuses(watched);
+      }
     };
     const handle = window.setInterval(flush, 500);
     const unsubStore = usePresenceStore.subscribe(flush);
-    const unsubConnect = ws.onConnect(flush);
+    const unsubConnect = ws.onConnect(reconcile);
     return () => { window.clearInterval(handle); unsubStore(); unsubConnect(); };
-  }, []);
+  }, [setStatus]);
 
   return null;
 }

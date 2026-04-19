@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
 import type { ChatEvent, MessageDto } from "../lib/messageTypes";
 import type { ChatDetail, ChatRole } from "../lib/types";
@@ -8,7 +8,6 @@ import { useAuthStore } from "../stores/authStore";
 import MessageItem from "./MessageItem";
 
 const PAGE = 50;
-const READ_GRACE_MS = 3000;
 
 export default function MessageList({
   chatId,
@@ -27,9 +26,13 @@ export default function MessageList({
   const stickToBottom = useRef(true);
   const prevHeight = useRef(0);
 
-  // Frozen on mount so new incoming messages don't shift the divider.
-  const [frozenLastRead] = useState<number | null>(initialLastReadMessageId);
-  const [graceEnded, setGraceEnded] = useState(false);
+  // Advances as the user catches up (tab visible + scrolled to bottom).
+  // Stays put while they're scrolled up or the tab is hidden, so the
+  // "New messages" divider moves to cover every fresh incoming message.
+  const [readUpTo, setReadUpTo] = useState<number>(initialLastReadMessageId ?? 0);
+  useEffect(() => {
+    setReadUpTo(initialLastReadMessageId ?? 0);
+  }, [chatId, initialLastReadMessageId]);
 
   const queryKey = ["messages", chatId];
   const q = useInfiniteQuery({
@@ -71,27 +74,31 @@ export default function MessageList({
     return unsub;
   }, [chatId, qc]);
 
-  // 3-second grace per chat. After it elapses we hide the divider and mark as read.
-  useEffect(() => {
-    setGraceEnded(false);
-    const handle = window.setTimeout(() => setGraceEnded(true), READ_GRACE_MS);
-    return () => window.clearTimeout(handle);
-  }, [chatId]);
+  const latestId = all.length > 0 ? all[all.length - 1].id : 0;
 
-  // Mark as read once grace ends, and again whenever a newer message lands.
-  useEffect(() => {
-    if (!graceEnded || all.length === 0) return;
-    const lastId = all[all.length - 1].id;
-    api.post(`/api/chats/${chatId}/read`, { lastReadMessageId: lastId })
+  // Only advance the read marker when the user is genuinely looking at the
+  // latest messages: the tab is visible AND they're scrolled to the bottom.
+  const tryMarkRead = useCallback(() => {
+    if (latestId <= readUpTo) return;
+    if (typeof document !== "undefined" && document.hidden) return;
+    if (!stickToBottom.current) return;
+    setReadUpTo(latestId);
+    api.post(`/api/chats/${chatId}/read`, { lastReadMessageId: latestId })
       .then(() => {
         qc.invalidateQueries({ queryKey: ["chats"] });
-        // keep the chat-detail cache in sync so a future re-visit freezes the
-        // up-to-date lastReadMessageId and no stale divider appears.
         qc.setQueryData(["chat", chatId], (old: ChatDetail | undefined) =>
-          old ? { ...old, lastReadMessageId: lastId } : old);
+          old ? { ...old, lastReadMessageId: latestId } : old);
       })
       .catch(() => undefined);
-  }, [graceEnded, all.length, chatId, qc]);
+  }, [latestId, readUpTo, chatId, qc]);
+
+  // Try on every message change (new incoming) and on visibility change.
+  useEffect(() => {
+    tryMarkRead();
+    const onVis = () => tryMarkRead();
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [tryMarkRead]);
 
   // Stick-to-bottom behavior
   useLayoutEffect(() => {
@@ -110,6 +117,7 @@ export default function MessageList({
     if (!el) return;
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
     stickToBottom.current = nearBottom;
+    if (nearBottom) tryMarkRead();
     if (el.scrollTop < 80 && q.hasNextPage && !q.isFetchingNextPage) {
       prevHeight.current = el.scrollHeight;
       stickToBottom.current = false;
@@ -119,15 +127,13 @@ export default function MessageList({
 
   const byId = useMemo(() => new Map(all.map((m) => [m.id, m])), [all]);
 
-  // Show divider before the first message we haven't read yet (authored by
-  // someone else). A null read marker is treated as 0 so first visits still
-  // get the separator. Hidden once the 3-second grace window elapses.
+  // Show divider above the first unread message from someone else. It moves
+  // forward as new messages arrive (if the user isn't catching up) and
+  // disappears once the read marker advances past the latest message.
   const dividerBeforeId = useMemo(() => {
-    if (graceEnded) return null;
-    const reference = frozenLastRead ?? 0;
-    const firstUnread = all.find((m) => m.id > reference && m.authorId !== meId);
+    const firstUnread = all.find((m) => m.id > readUpTo && m.authorId !== meId);
     return firstUnread ? firstUnread.id : null;
-  }, [graceEnded, frozenLastRead, all, meId]);
+  }, [readUpTo, all, meId]);
 
   return (
     <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto bg-white">

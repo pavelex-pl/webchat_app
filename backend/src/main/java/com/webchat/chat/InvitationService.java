@@ -7,6 +7,7 @@ import com.webchat.common.ConflictException;
 import com.webchat.common.NotFoundException;
 import com.webchat.common.UnauthorizedException;
 import java.util.List;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,15 +20,18 @@ public class InvitationService {
     private final ChatInvitationRepository invitations;
     private final UserRepository users;
     private final ChatPolicy policy;
+    private final ApplicationEventPublisher events;
 
     public InvitationService(ChatRepository chats, ChatMemberRepository members, ChatBanRepository bans,
-                             ChatInvitationRepository invitations, UserRepository users, ChatPolicy policy) {
+                             ChatInvitationRepository invitations, UserRepository users, ChatPolicy policy,
+                             ApplicationEventPublisher events) {
         this.chats = chats;
         this.members = members;
         this.bans = bans;
         this.invitations = invitations;
         this.users = users;
         this.policy = policy;
+        this.events = events;
     }
 
     @Transactional
@@ -50,7 +54,9 @@ public class InvitationService {
         if (invitations.findByChatIdAndInviteeIdAndAcceptedAtIsNullAndDeclinedAtIsNull(chatId, invitee.getId()).isPresent()) {
             throw new ConflictException("An invitation is already pending");
         }
-        return invitations.save(new ChatInvitation(chatId, invitee.getId(), inviterId));
+        ChatInvitation saved = invitations.save(new ChatInvitation(chatId, invitee.getId(), inviterId));
+        events.publishEvent(new InvitationEvent(invitee.getId(), chatId, saved.getId(), InvitationEvent.Kind.CREATED));
+        return saved;
     }
 
     public List<ChatInvitation> listForUser(Long userId) {
@@ -75,6 +81,7 @@ public class InvitationService {
             members.save(new ChatMember(inv.getChatId(), userId, ChatRole.MEMBER));
         }
         inv.accept();
+        events.publishEvent(new InvitationEvent(userId, inv.getChatId(), inv.getId(), InvitationEvent.Kind.ACCEPTED));
     }
 
     @Transactional
@@ -84,5 +91,6 @@ public class InvitationService {
         if (!inv.getInviteeId().equals(userId)) throw new UnauthorizedException("Not your invitation");
         if (!inv.isPending()) throw new BadRequestException("Invitation no longer pending");
         inv.decline();
+        events.publishEvent(new InvitationEvent(userId, inv.getChatId(), inv.getId(), InvitationEvent.Kind.DECLINED));
     }
 }

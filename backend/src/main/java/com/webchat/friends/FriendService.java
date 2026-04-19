@@ -8,6 +8,7 @@ import com.webchat.common.NotFoundException;
 import com.webchat.common.UnauthorizedException;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,11 +18,14 @@ public class FriendService {
     private final FriendshipRepository friendships;
     private final UserBlockRepository blocks;
     private final UserRepository users;
+    private final ApplicationEventPublisher events;
 
-    public FriendService(FriendshipRepository friendships, UserBlockRepository blocks, UserRepository users) {
+    public FriendService(FriendshipRepository friendships, UserBlockRepository blocks, UserRepository users,
+                         ApplicationEventPublisher events) {
         this.friendships = friendships;
         this.blocks = blocks;
         this.users = users;
+        this.events = events;
     }
 
     @Transactional
@@ -40,10 +44,13 @@ public class FriendService {
             if (f.getInitiatedBy().equals(fromUserId)) throw new ConflictException("Request already pending");
             // other side requested earlier; accept here
             f.accept();
+            events.publishEvent(new FriendRequestEvent(f.getInitiatedBy(), fromUserId, FriendRequestEvent.Kind.ACCEPTED));
             return f;
         }
         Friendship f = new Friendship(fromUserId, to.getId(), text);
-        return friendships.save(f);
+        Friendship saved = friendships.save(f);
+        events.publishEvent(new FriendRequestEvent(to.getId(), fromUserId, FriendRequestEvent.Kind.CREATED));
+        return saved;
     }
 
     @Transactional
@@ -53,6 +60,7 @@ public class FriendService {
         if (f.getStatus() == FriendshipStatus.ACCEPTED) return f;
         if (f.getInitiatedBy().equals(userId)) throw new BadRequestException("Cannot accept your own request");
         f.accept();
+        events.publishEvent(new FriendRequestEvent(f.getInitiatedBy(), userId, FriendRequestEvent.Kind.ACCEPTED));
         return f;
     }
 
@@ -63,6 +71,7 @@ public class FriendService {
         if (f.getStatus() != FriendshipStatus.PENDING) throw new BadRequestException("Not a pending request");
         if (f.getInitiatedBy().equals(userId)) throw new BadRequestException("Use cancel for outgoing");
         friendships.delete(f);
+        events.publishEvent(new FriendRequestEvent(f.getInitiatedBy(), userId, FriendRequestEvent.Kind.DECLINED));
     }
 
     @Transactional
@@ -72,6 +81,7 @@ public class FriendService {
         if (f.getStatus() != FriendshipStatus.PENDING) throw new BadRequestException("Not a pending request");
         if (!f.getInitiatedBy().equals(userId)) throw new BadRequestException("Not your request");
         friendships.delete(f);
+        events.publishEvent(new FriendRequestEvent(otherUserId, userId, FriendRequestEvent.Kind.CANCELED));
     }
 
     @Transactional

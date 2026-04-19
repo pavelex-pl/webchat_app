@@ -2,12 +2,16 @@ package com.webchat.presence;
 
 import com.webchat.presence.dto.PresenceUpdate;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
 public class PresenceScheduler {
+
+    private static final Logger log = LoggerFactory.getLogger(PresenceScheduler.class);
 
     private final PresenceService presence;
     private final PresenceSubscriptions subs;
@@ -37,6 +41,7 @@ public class PresenceScheduler {
     private void broadcast(long targetUserId, Status status) {
         Set<Long> watchers = subs.watchersOf(targetUserId);
         PresenceUpdate update = new PresenceUpdate(targetUserId, status);
+        log.info("broadcast presence targetUserId={} status={} watchers={}", targetUserId, status, watchers);
         for (Long watcherId : watchers) {
             stomp.convertAndSend("/topic/user." + watcherId + ".presence", update);
         }

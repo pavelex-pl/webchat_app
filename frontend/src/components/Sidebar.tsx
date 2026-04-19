@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, NavLink, useParams } from "react-router-dom";
 import { api } from "../lib/api";
-import type { ChatSummary, Invitation } from "../lib/types";
+import type { ChatSummary, Friendship, Invitation } from "../lib/types";
 import CreateRoomModal from "./CreateRoomModal";
 import PresenceDot from "./PresenceDot";
 
@@ -18,6 +18,10 @@ export default function Sidebar() {
   const inv = useQuery({
     queryKey: ["invitations"],
     queryFn: () => api.get<Invitation[]>("/api/invitations"),
+  });
+  const incoming = useQuery({
+    queryKey: ["friends", "incoming"],
+    queryFn: () => api.get<Friendship[]>("/api/friends/requests/incoming"),
   });
 
   const publics = chats.data?.filter((r) => r.type === "PUBLIC_ROOM") ?? [];
@@ -39,6 +43,11 @@ export default function Sidebar() {
         <NavLink to="/friends" className={({ isActive }) =>
           `block text-sm px-2 py-1 rounded ${isActive ? "bg-slate-100 text-slate-900" : "text-slate-600 hover:bg-slate-50"}`}>
           Friends
+          {incoming.data && incoming.data.length > 0 && (
+            <span className="ml-1 inline-flex items-center justify-center bg-red-600 text-white rounded-full px-1.5 text-xs">
+              {incoming.data.length}
+            </span>
+          )}
         </NavLink>
         <NavLink to="/invitations" className={({ isActive }) =>
           `block text-sm px-2 py-1 rounded ${isActive ? "bg-slate-100 text-slate-900" : "text-slate-600 hover:bg-slate-50"}`}>
