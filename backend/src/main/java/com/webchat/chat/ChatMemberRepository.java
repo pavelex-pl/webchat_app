@@ -40,4 +40,17 @@ public interface ChatMemberRepository extends JpaRepository<ChatMember, ChatMemb
            """)
     List<Long> findMemberChatIds(@Param("userId") Long userId,
                                  @Param("chatIds") Collection<Long> chatIds);
+
+    @Query("""
+           SELECT m.id.chatId AS chatId, COUNT(m) AS count
+             FROM ChatMember m
+            WHERE m.id.chatId IN :chatIds
+            GROUP BY m.id.chatId
+           """)
+    List<ChatMemberCount> countByChatIds(@Param("chatIds") Collection<Long> chatIds);
+
+    interface ChatMemberCount {
+        Long getChatId();
+        Long getCount();
+    }
 }

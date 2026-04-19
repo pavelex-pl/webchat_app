@@ -82,6 +82,7 @@ public class ChatsController {
         Set<Long> pageChatIds = pageItems.stream().map(Chat::getId).collect(Collectors.toSet());
 
         Map<Long, Long> unreadByChat = new HashMap<>();
+        Map<Long, Long> memberCountByChat = memberships.memberCounts(pageChatIds);
         if (!pageChatIds.isEmpty()) {
             for (var u : messages.countUnread(uid, pageChatIds)) {
                 unreadByChat.put(u.getChatId(), u.getUnread());
@@ -101,17 +102,18 @@ public class ChatsController {
 
         List<ChatSummaryResponse> out = new ArrayList<>();
         for (Chat c : pageItems) {
+            long memberCount = memberCountByChat.getOrDefault(c.getId(), 0L);
             if (type == ChatType.DIRECT) {
                 Long peerId = peerIdByChat.get(c.getId());
                 out.add(new ChatSummaryResponse(
                         c.getId(), c.getType(), null, null, null,
-                        memberships.memberCount(c.getId()),
+                        memberCount,
                         peerId, peerId == null ? null : peerUsernames.get(peerId),
                         unreadByChat.getOrDefault(c.getId(), 0L)));
             } else {
                 out.add(new ChatSummaryResponse(
                         c.getId(), c.getType(), c.getName(), c.getDescription(),
-                        c.getOwnerId(), memberships.memberCount(c.getId()), null, null,
+                        c.getOwnerId(), memberCount, null, null,
                         unreadByChat.getOrDefault(c.getId(), 0L)));
             }
         }

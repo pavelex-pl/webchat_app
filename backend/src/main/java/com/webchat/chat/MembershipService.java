@@ -4,7 +4,10 @@ import com.webchat.common.BadRequestException;
 import com.webchat.common.ConflictException;
 import com.webchat.common.NotFoundException;
 import com.webchat.common.UnauthorizedException;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -70,6 +73,15 @@ public class MembershipService {
 
     public long memberCount(Long chatId) {
         return members.countByIdChatId(chatId);
+    }
+
+    public Map<Long, Long> memberCounts(Collection<Long> chatIds) {
+        if (chatIds.isEmpty()) return Map.of();
+        Map<Long, Long> out = new HashMap<>();
+        for (var row : members.countByChatIds(chatIds)) {
+            out.put(row.getChatId(), row.getCount());
+        }
+        return out;
     }
 
     @Transactional

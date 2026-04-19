@@ -44,8 +44,7 @@ export default function PublicRoomsPage() {
   });
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto">
-      <div className="p-6 max-w-3xl mx-auto">
+    <div className="p-6 max-w-3xl mx-auto">
       <h1 className="text-xl font-semibold text-slate-800 mb-3">Public rooms</h1>
       <input
         value={q}
@@ -102,7 +101,6 @@ export default function PublicRoomsPage() {
           {join.error instanceof ApiError ? join.error.detail : String(join.error)}
         </p>
       )}
-      </div>
     </div>
   );
 }
