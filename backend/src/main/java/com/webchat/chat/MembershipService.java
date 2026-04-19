@@ -123,9 +123,8 @@ public class MembershipService {
     }
 
     @Transactional
-    public void demoteAdmin(Long callerId, Long chatId, Long targetUserId) {
-        policy.requireAdmin(chatId, callerId);
-        if (callerId.equals(targetUserId)) throw new BadRequestException("You cannot remove your own admin role");
+    public void demoteAdmin(Long ownerId, Long chatId, Long targetUserId) {
+        policy.requireOwnership(chatId, ownerId);
         ChatMember target = members.findByIdChatIdAndIdUserId(chatId, targetUserId)
                 .orElseThrow(() -> new NotFoundException("Member not found"));
         if (target.getRole() == ChatRole.OWNER) throw new BadRequestException("Owner cannot be demoted");
