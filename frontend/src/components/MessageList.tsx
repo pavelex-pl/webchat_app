@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
 import type { ChatEvent, MessageDto } from "../lib/messageTypes";
 import type { ChatDetail, ChatRole } from "../lib/types";
@@ -8,6 +8,9 @@ import { useAuthStore } from "../stores/authStore";
 import MessageItem from "./MessageItem";
 
 const PAGE = 50;
+// Show the "New messages" divider for this long (while conditions are met)
+// before advancing the read marker past the latest message.
+const READ_DWELL_MS = 2500;
 
 export default function MessageList({
   chatId,
@@ -76,29 +79,31 @@ export default function MessageList({
 
   const latestId = all.length > 0 ? all[all.length - 1].id : 0;
 
-  // Only advance the read marker when the user is genuinely looking at the
-  // latest messages: the tab is visible AND they're scrolled to the bottom.
-  const tryMarkRead = useCallback(() => {
-    if (latestId <= readUpTo) return;
-    if (typeof document !== "undefined" && document.hidden) return;
-    if (!stickToBottom.current) return;
-    setReadUpTo(latestId);
-    api.post(`/api/chats/${chatId}/read`, { lastReadMessageId: latestId })
-      .then(() => {
-        qc.invalidateQueries({ queryKey: ["chats"] });
-        qc.setQueryData(["chat", chatId], (old: ChatDetail | undefined) =>
-          old ? { ...old, lastReadMessageId: latestId } : old);
-      })
-      .catch(() => undefined);
-  }, [latestId, readUpTo, chatId, qc]);
-
-  // Try on every message change (new incoming) and on visibility change.
+  // Keep the "New messages" divider visible until the user has been reading
+  // continuously for READ_DWELL_MS (tab visible + scrolled to bottom). Any
+  // new incoming message resets the dwell so the divider has time to be
+  // noticed. Scrolling up or hiding the tab pauses the dwell, so unread
+  // stays marked as unread.
   useEffect(() => {
-    tryMarkRead();
-    const onVis = () => tryMarkRead();
-    document.addEventListener("visibilitychange", onVis);
-    return () => document.removeEventListener("visibilitychange", onVis);
-  }, [tryMarkRead]);
+    if (latestId <= readUpTo) return;
+    let readyStart: number | null = null;
+    const handle = window.setInterval(() => {
+      const ready = !document.hidden && stickToBottom.current;
+      if (!ready) { readyStart = null; return; }
+      if (readyStart === null) { readyStart = Date.now(); return; }
+      if (Date.now() - readyStart < READ_DWELL_MS) return;
+      window.clearInterval(handle);
+      setReadUpTo(latestId);
+      api.post(`/api/chats/${chatId}/read`, { lastReadMessageId: latestId })
+        .then(() => {
+          qc.invalidateQueries({ queryKey: ["chats"] });
+          qc.setQueryData(["chat", chatId], (old: ChatDetail | undefined) =>
+            old ? { ...old, lastReadMessageId: latestId } : old);
+        })
+        .catch(() => undefined);
+    }, 500);
+    return () => window.clearInterval(handle);
+  }, [latestId, readUpTo, chatId, qc]);
 
   // Stick-to-bottom behavior
   useLayoutEffect(() => {
@@ -117,7 +122,6 @@ export default function MessageList({
     if (!el) return;
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
     stickToBottom.current = nearBottom;
-    if (nearBottom) tryMarkRead();
     if (el.scrollTop < 80 && q.hasNextPage && !q.isFetchingNextPage) {
       prevHeight.current = el.scrollHeight;
       stickToBottom.current = false;
