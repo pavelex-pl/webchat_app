@@ -155,19 +155,32 @@ export default function MessageList({
         </div>
       )}
       <div className="py-2">
-        {all.map((m) => (
-          <Fragment key={m.id}>
-            {dividerBeforeId === m.id && <NewMessagesDivider />}
-            <MessageItem
-              m={m}
-              meId={meId}
-              yourRole={yourRole}
-              readOnly={readOnly}
-              parent={m.replyToId ? byId.get(m.replyToId) : undefined}
-              onReply={onReply}
-            />
-          </Fragment>
-        ))}
+        {all.map((m, i) => {
+          const prev = i > 0 ? all[i - 1] : undefined;
+          const dividerHere = dividerBeforeId === m.id;
+          const grouped =
+            !dividerHere &&
+            !!prev &&
+            !prev.deleted &&
+            !m.deleted &&
+            prev.authorId === m.authorId &&
+            m.authorId != null &&
+            new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60 * 1000;
+          return (
+            <Fragment key={m.id}>
+              {dividerHere && <NewMessagesDivider />}
+              <MessageItem
+                m={m}
+                meId={meId}
+                yourRole={yourRole}
+                readOnly={readOnly}
+                grouped={grouped}
+                parent={m.replyToId ? byId.get(m.replyToId) : undefined}
+                onReply={onReply}
+              />
+            </Fragment>
+          );
+        })}
       </div>
     </div>
   );
