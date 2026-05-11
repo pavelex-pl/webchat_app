@@ -5,6 +5,8 @@ services:
       POSTGRES_DB: webchat
       POSTGRES_USER: webchat
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-webchat}
+    ports:
+      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
